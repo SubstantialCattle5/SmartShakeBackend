@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: smartshake_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-smartshake_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartshake_password}
+      POSTGRES_DB: ${POSTGRES_DB:-smartshake_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - smartshake_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-smartshake_user} -d ${POSTGRES_DB:-smartshake_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Express Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: smartshake_app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-smartshake_user}:${POSTGRES_PASSWORD:-smartshake_password}@postgres:5432/${POSTGRES_DB:-smartshake_db}?schema=public
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - smartshake_network
+    volumes:
+      # Mount uploads directory for file storage (if needed)
+      - ./uploads:/app/uploads
+
+  # Development version (optional)
+  app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    container_name: smartshake_app_dev
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-smartshake_user}:${POSTGRES_PASSWORD:-smartshake_password}@postgres:5432/${POSTGRES_DB:-smartshake_db}?schema=public
+    ports:
+      - "3001:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - smartshake_network
+    volumes:
+      - .:/app
+      - /app/node_modules
+    profiles:
+      - development
+
+volumes:
+  postgres_data:
+
+networks:
+  smartshake_network:
+    driver: bridge 
