@@ -5,51 +5,44 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database...');
 
-  // Create users
+  // Create users with phone numbers
   const user1 = await prisma.user.upsert({
-    where: { email: 'john@example.com' },
+    where: { phone: '+1234567890' },
     update: {},
     create: {
+      phone: '+1234567890',
       email: 'john@example.com',
       name: 'John Doe',
-      password: 'hashed-password-here', // In real app, this should be properly hashed
+      isVerified: true,
     },
   });
 
   const user2 = await prisma.user.upsert({
-    where: { email: 'jane@example.com' },
+    where: { phone: '+1987654321' },
     update: {},
     create: {
+      phone: '+1987654321',
       email: 'jane@example.com',
       name: 'Jane Smith',
-      password: 'hashed-password-here',
+      isVerified: true,
     },
   });
 
-  // Create posts
-  await prisma.post.upsert({
-    where: { id: 1 },
+  const user3 = await prisma.user.upsert({
+    where: { phone: '+1555123456' },
     update: {},
     create: {
-      title: 'Welcome to SmartShake',
-      content: 'This is the first post in our SmartShake application.',
-      published: true,
-      authorId: user1.id,
-    },
-  });
-
-  await prisma.post.upsert({
-    where: { id: 2 },
-    update: {},
-    create: {
-      title: 'Getting Started with API',
-      content: 'Learn how to use our RESTful API endpoints.',
-      published: false,
-      authorId: user2.id,
+      phone: '+1555123456',
+      name: 'Bob Wilson',
+      isVerified: false, // Not verified yet
     },
   });
 
   console.log('✅ Database seeded successfully');
+  console.log(`Created users:`);
+  console.log(`- ${user1.name} (${user1.phone})`);
+  console.log(`- ${user2.name} (${user2.phone})`);
+  console.log(`- ${user3.name} (${user3.phone})`);
 }
 
 main()

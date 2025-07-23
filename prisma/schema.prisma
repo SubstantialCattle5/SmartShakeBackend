@@ -11,26 +11,39 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  name      String?
-  password  String
-  posts     Post[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          Int      @id @default(autoincrement())
+  phone       String   @unique
+  email       String?  @unique
+  name        String?
+  password    String?  // Optional for OTP-only users
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  otpCodes    OtpCode[]
 
   @@map("users")
 }
 
-model Post {
+model OtpCode {
   id        Int      @id @default(autoincrement())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  Int
-  author    User     @relation(fields: [authorId], references: [id])
+  phone     String
+  code      String
+  purpose   OtpPurpose @default(LOGIN)
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
-  @@map("posts")
+  @@map("otp_codes")
+  @@index([phone, purpose])
+  @@index([code])
+}
+
+enum OtpPurpose {
+  LOGIN
+  REGISTRATION
+  PASSWORD_RESET
 } 

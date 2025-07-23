@@ -10,16 +10,42 @@ export interface ApiResponse<T = any> {
 
 // User types
 export interface CreateUserRequest {
-  email: string;
+  phone: string;
+  email?: string;
   name?: string;
-  password: string;
+  password?: string;
 }
 
 export interface UserResponse {
   id: number;
-  email: string;
+  phone: string;
+  email: string | null;
   name: string | null;
+  isVerified: boolean;
   createdAt: Date;
+}
+
+// OTP types
+export interface SendOtpRequest {
+  phone: string;
+  purpose?: 'LOGIN' | 'REGISTRATION' | 'PASSWORD_RESET';
+}
+
+export interface VerifyOtpRequest {
+  phone: string;
+  code: string;
+  purpose?: 'LOGIN' | 'REGISTRATION' | 'PASSWORD_RESET';
+}
+
+export interface OtpResponse {
+  message: string;
+  expiresAt: Date;
+}
+
+export interface LoginResponse {
+  user: UserResponse;
+  token?: string; // For future JWT implementation
+  message: string;
 }
 
 // Extended Request/Response types

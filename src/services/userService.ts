@@ -9,8 +9,10 @@ export class UserService {
       const users = await prisma.user.findMany({
         select: {
           id: true,
+          phone: true,
           email: true,
           name: true,
+          isVerified: true,
           createdAt: true,
         },
         orderBy: {
@@ -31,8 +33,10 @@ export class UserService {
         where: { id },
         select: {
           id: true,
+          phone: true,
           email: true,
           name: true,
+          isVerified: true,
           createdAt: true,
         },
       });
@@ -43,22 +47,57 @@ export class UserService {
     }
   }
 
+  // Get user by phone
+  static async getUserByPhone(phone: string): Promise<UserResponse | null> {
+    try {
+      const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+      
+      const user = await prisma.user.findUnique({
+        where: { phone: cleanPhone },
+        select: {
+          id: true,
+          phone: true,
+          email: true,
+          name: true,
+          isVerified: true,
+          createdAt: true,
+        },
+      });
+      return user;
+    } catch (error) {
+      console.error('Error fetching user by phone:', error);
+      throw new Error('Failed to fetch user');
+    }
+  }
+
   // Create a new user
   static async createUser(userData: CreateUserRequest): Promise<UserResponse> {
     try {
+      // Clean phone number
+      const cleanPhone = userData.phone.replace(/[\s\-\(\)]/g, '');
+      
+      // Validate phone number format
+      const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+      if (!phoneRegex.test(cleanPhone)) {
+        throw new Error('Invalid phone number format');
+      }
+
       // In a real application, you should hash the password here
       // const hashedPassword = await bcrypt.hash(userData.password, 10);
       
       const user = await prisma.user.create({
         data: {
+          phone: cleanPhone,
           email: userData.email,
           name: userData.name,
           password: userData.password, // In production, use hashedPassword
         },
         select: {
           id: true,
+          phone: true,
           email: true,
           name: true,
+          isVerified: true,
           createdAt: true,
         },
       });
@@ -69,7 +108,47 @@ export class UserService {
       // Handle Prisma unique constraint errors
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
-          throw new Error('Email already exists');
+          const target = error.meta?.target;
+          if (Array.isArray(target) && target.includes('phone')) {
+            throw new Error('Phone number already exists');
+          }
+          if (Array.isArray(target) && target.includes('email')) {
+            throw new Error('Email already exists');
+          }
+          throw new Error('User already exists');
+        }
+      }
+      throw new Error('Failed to create user');
+    }
+  }
+
+  // Create user with phone verification
+  static async createUserWithPhone(phone: string, name?: string): Promise<UserResponse> {
+    try {
+      const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+      
+      const user = await prisma.user.create({
+        data: {
+          phone: cleanPhone,
+          name,
+          isVerified: true, // Mark as verified since they completed OTP
+        },
+        select: {
+          id: true,
+          phone: true,
+          email: true,
+          name: true,
+          isVerified: true,
+          createdAt: true,
+        },
+      });
+      return user;
+    } catch (error) {
+      console.error('Error creating user with phone:', error);
+      
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          throw new Error('Phone number already exists');
         }
       }
       throw new Error('Failed to create user');
@@ -84,8 +163,10 @@ export class UserService {
         data: userData,
         select: {
           id: true,
+          phone: true,
           email: true,
           name: true,
+          isVerified: true,
           createdAt: true,
         },
       });

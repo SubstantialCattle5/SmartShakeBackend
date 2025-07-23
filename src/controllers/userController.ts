@@ -74,30 +74,31 @@ export class UserController {
   // POST /api/users
   static async createUser(req: TypedRequest<CreateUserRequest>, res: Response): Promise<void> {
     try {
-      const { email, name, password } = req.body;
+      const { phone, email, name, password } = req.body;
       
       // Validation
-      if (!email || !password) {
+      if (!phone) {
         const response: ApiResponse = {
           success: false,
-          error: 'Email and password are required',
+          error: 'Phone number is required',
         };
         res.status(400).json(response);
         return;
       }
 
-      // Basic email validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
+      // Basic phone validation
+      const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+      const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+      if (!phoneRegex.test(cleanPhone)) {
         const response: ApiResponse = {
           success: false,
-          error: 'Invalid email format',
+          error: 'Invalid phone number format',
         };
         res.status(400).json(response);
         return;
       }
 
-      const user = await UserService.createUser({ email, name, password });
+      const user = await UserService.createUser({ phone, email, name, password });
       
       const response: ApiResponse = {
         success: true,

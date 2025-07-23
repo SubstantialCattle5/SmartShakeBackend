@@ -1,0 +1,19 @@
+import { Router } from 'express';
+import { AuthController } from '../controllers/authController';
+import { asyncHandler } from '../middleware/errorHandler';
+
+const router = Router();
+
+// POST /api/auth/register - Start registration with phone
+router.post('/register', asyncHandler(AuthController.registerWithPhone));
+
+// POST /api/auth/login - Start login with phone
+router.post('/login', asyncHandler(AuthController.loginWithPhone));
+
+// POST /api/auth/send-otp - Send OTP (generic endpoint)
+router.post('/send-otp', asyncHandler(AuthController.sendOtp));
+
+// POST /api/auth/verify-otp - Verify OTP and complete login/registration
+router.post('/verify-otp', asyncHandler(AuthController.verifyOtp));
+
+export { router as authRoutes }; 
