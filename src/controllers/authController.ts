@@ -326,6 +326,15 @@ export class AuthController {
         return;
       }
 
+      if (!existingUser.isVerified) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Account not verified. Please complete registration first.',
+        };
+        res.status(400).json(response);
+        return;
+      }
+
       // Send OTP for login
       try {
         const { expiresAt } = await OtpService.sendOtp(phone, OtpPurpose.LOGIN);
