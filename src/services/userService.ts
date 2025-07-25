@@ -123,7 +123,7 @@ export class UserService {
   }
 
   // Create user with phone verification
-  static async createUserWithPhone(phone: string, name?: string): Promise<UserResponse> {
+  static async createUserWithPhone(phone: string, name?: string, isVerified: boolean = true): Promise<UserResponse> {
     try {
       const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
       
@@ -131,7 +131,7 @@ export class UserService {
         data: {
           phone: cleanPhone,
           name,
-          isVerified: true, // Mark as verified since they completed OTP
+          isVerified,
         },
         select: {
           id: true,
@@ -152,6 +152,36 @@ export class UserService {
         }
       }
       throw new Error('Failed to create user');
+    }
+  }
+
+  // Mark user as verified by phone
+  static async markUserAsVerified(phone: string): Promise<UserResponse | null> {
+    try {
+      const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+      
+      const user = await prisma.user.update({
+        where: { phone: cleanPhone },
+        data: { isVerified: true },
+        select: {
+          id: true,
+          phone: true,
+          email: true,
+          name: true,
+          isVerified: true,
+          createdAt: true,
+        },
+      });
+      return user;
+    } catch (error) {
+      console.error('Error marking user as verified:', error);
+      
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2025') {
+          return null; // User not found
+        }
+      }
+      throw new Error('Failed to verify user');
     }
   }
 

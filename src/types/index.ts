@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { User, OtpCode, OtpPurpose, Prisma } from '@prisma/client';
 
 // API Response types
 export interface ApiResponse<T = any> {
@@ -8,33 +9,20 @@ export interface ApiResponse<T = any> {
   error?: string;
 }
 
-// User types
-export interface CreateUserRequest {
-  phone: string;
-  email?: string;
-  name?: string;
-  password?: string;
-}
-
-export interface UserResponse {
-  id: number;
-  phone: string;
-  email: string | null;
-  name: string | null;
-  isVerified: boolean;
-  createdAt: Date;
-}
+// Use Prisma types instead of custom types
+export type UserResponse = Omit<User, 'password' | 'updatedAt'>;
+export type CreateUserRequest = Prisma.UserCreateInput;
 
 // OTP types
 export interface SendOtpRequest {
   phone: string;
-  purpose?: 'LOGIN' | 'REGISTRATION' | 'PASSWORD_RESET';
+  purpose?: OtpPurpose;
 }
 
 export interface VerifyOtpRequest {
   phone: string;
   code: string;
-  purpose?: 'LOGIN' | 'REGISTRATION' | 'PASSWORD_RESET';
+  purpose?: OtpPurpose;
 }
 
 export interface OtpResponse {
@@ -63,4 +51,7 @@ export interface HealthCheckResponse {
   timestamp: string;
   service: string;
   database?: string;
-} 
+}
+
+// Re-export Prisma types for convenience
+export { User, OtpCode, OtpPurpose, Prisma }; 

@@ -108,10 +108,30 @@ export class AuthController {
       let user;
 
       if (purpose === 'REGISTRATION') {
-        // Create new user
-        user = await UserService.createUserWithPhone(phone);
+        // Get the unverified user and mark as verified
+        user = await UserService.getUserByPhone(phone);
+        if (!user) {
+          const response: ApiResponse = {
+            success: false,
+            error: 'User not found. Please register first.',
+          };
+          res.status(404).json(response);
+          return;
+        }
+        
+        // Mark user as verified
+        const verifiedUser = await UserService.markUserAsVerified(phone);
+        if (!verifiedUser) {
+          const response: ApiResponse = {
+            success: false,
+            error: 'Failed to verify user.',
+          };
+          res.status(500).json(response);
+          return;
+        }
+        user = verifiedUser;
       } else {
-        // Get existing user
+        // Get existing user for login
         user = await UserService.getUserByPhone(phone);
         if (!user) {
           const response: ApiResponse = {
@@ -119,6 +139,16 @@ export class AuthController {
             error: 'User not found',
           };
           res.status(404).json(response);
+          return;
+        }
+
+        // Check if user is verified
+        if (!user.isVerified) {
+          const response: ApiResponse = {
+            success: false,
+            error: 'Account not verified. Please complete registration first.',
+          };
+          res.status(400).json(response);
           return;
         }
       }
@@ -160,6 +190,15 @@ export class AuthController {
         return;
       }
 
+      if (!name?.trim()) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Name is required for registration',
+        };
+        res.status(400).json(response);
+        return;
+      }
+
       // Check if user already exists
       const existingUser = await UserService.getUserByPhone(phone);
       if (existingUser) {
@@ -171,6 +210,9 @@ export class AuthController {
         return;
       }
 
+      // Create user with isVerified: false
+      await UserService.createUserWithPhone(phone, name, false);
+
       // Send OTP for registration
       const { expiresAt } = await OtpService.sendOtp(phone, 'REGISTRATION');
       
@@ -180,7 +222,7 @@ export class AuthController {
           message: `OTP sent to ${phone} for registration`,
           expiresAt,
         },
-        message: 'Registration OTP sent. Please verify to complete registration.',
+        message: 'Registration initiated. Please verify OTP to complete registration.',
       };
       
       res.status(200).json(response);
