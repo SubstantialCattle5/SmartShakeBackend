@@ -1,5 +1,5 @@
 import { prisma } from '../config/database';
-import { Prisma } from '@prisma/client';
+import { Prisma, OtpPurpose } from '@prisma/client';
 
 export class OtpService {
   // Generate a 6-digit OTP (hardcoded for development)
@@ -13,11 +13,8 @@ export class OtpService {
     return new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes
   }
 
-  // Send OTP (in real app, integrate with SMS service)
-  static async sendOtp(
-    phone: string, 
-    purpose: 'LOGIN' | 'REGISTRATION' | 'PASSWORD_RESET' = 'LOGIN'
-  ): Promise<{ code: string; expiresAt: Date }> {
+  // Clean and validate phone number
+  static cleanAndValidatePhone(phone: string): { cleanPhone: string; isValid: boolean; error?: string } {
     try {
       // Clean phone number (remove spaces, dashes, etc.)
       const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
@@ -25,7 +22,33 @@ export class OtpService {
       // Validate phone number format (basic validation)
       const phoneRegex = /^\+?[1-9]\d{1,14}$/;
       if (!phoneRegex.test(cleanPhone)) {
-        throw new Error('Invalid phone number format');
+        return {
+          cleanPhone,
+          isValid: false,
+          error: 'Invalid phone number format. Please use format: +1234567890'
+        };
+      }
+
+      return { cleanPhone, isValid: true };
+    } catch (error) {
+      return {
+        cleanPhone: phone,
+        isValid: false,
+        error: 'Invalid phone number format'
+      };
+    }
+  }
+
+  // Send OTP (in real app, integrate with SMS service)
+  static async sendOtp(
+    phone: string, 
+    purpose: OtpPurpose = OtpPurpose.LOGIN
+  ): Promise<{ code: string; expiresAt: Date }> {
+    try {
+      // Clean and validate phone number
+      const { cleanPhone, isValid, error } = this.cleanAndValidatePhone(phone);
+      if (!isValid) {
+        throw new Error(error || 'Invalid phone number format');
       }
 
       // Generate OTP code
@@ -63,7 +86,8 @@ export class OtpService {
       return { code, expiresAt };
     } catch (error) {
       console.error('Error sending OTP:', error);
-      throw new Error('Failed to send OTP');
+      // Re-throw the original error message for better error handling
+      throw error;
     }
   }
 
@@ -71,10 +95,13 @@ export class OtpService {
   static async verifyOtp(
     phone: string, 
     code: string, 
-    purpose: 'LOGIN' | 'REGISTRATION' | 'PASSWORD_RESET' = 'LOGIN'
+    purpose: OtpPurpose = OtpPurpose.LOGIN
   ): Promise<boolean> {
     try {
-      const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+      const { cleanPhone, isValid } = this.cleanAndValidatePhone(phone);
+      if (!isValid) {
+        return false;
+      }
       
       // Find valid OTP
       const otpRecord = await prisma.otpCode.findFirst({
@@ -131,7 +158,11 @@ export class OtpService {
   // Get OTP attempts for rate limiting
   static async getOtpAttempts(phone: string, timeWindow = 60): Promise<number> {
     try {
-      const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+      const { cleanPhone, isValid } = this.cleanAndValidatePhone(phone);
+      if (!isValid) {
+        return 0;
+      }
+      
       const timeLimit = new Date(Date.now() - timeWindow * 60 * 1000); // Last hour
 
       const count = await prisma.otpCode.count({

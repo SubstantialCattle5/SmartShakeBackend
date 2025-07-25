@@ -1,18 +1,29 @@
 import { Request, Response } from 'express';
 import { OtpService } from '../services/otpService';
 import { UserService } from '../services/userService';
-import { SendOtpRequest, VerifyOtpRequest, TypedRequest, ApiResponse, LoginResponse, OtpResponse } from '../types';
+import { SendOtpRequest, VerifyOtpRequest, TypedRequest, ApiResponse, LoginResponse, OtpResponse, OtpPurpose } from '../types';
 
 export class AuthController {
   // POST /api/auth/send-otp
   static async sendOtp(req: TypedRequest<SendOtpRequest>, res: Response): Promise<void> {
     try {
-      const { phone, purpose = 'LOGIN' } = req.body;
+      const { phone, purpose = OtpPurpose.LOGIN } = req.body;
       
       if (!phone) {
         const response: ApiResponse = {
           success: false,
           error: 'Phone number is required',
+        };
+        res.status(400).json(response);
+        return;
+      }
+
+      // Validate phone number format early
+      const { isValid, error: phoneError } = OtpService.cleanAndValidatePhone(phone);
+      if (!isValid) {
+        const response: ApiResponse = {
+          success: false,
+          error: phoneError || 'Invalid phone number format',
         };
         res.status(400).json(response);
         return;
@@ -30,7 +41,7 @@ export class AuthController {
       }
 
       // For registration, check if user doesn't exist
-      if (purpose === 'REGISTRATION') {
+      if (purpose === OtpPurpose.REGISTRATION) {
         const existingUser = await UserService.getUserByPhone(phone);
         if (existingUser) {
           const response: ApiResponse = {
@@ -43,7 +54,7 @@ export class AuthController {
       }
 
       // For login, check if user exists
-      if (purpose === 'LOGIN') {
+      if (purpose === OtpPurpose.LOGIN) {
         const existingUser = await UserService.getUserByPhone(phone);
         if (!existingUser) {
           const response: ApiResponse = {
@@ -55,18 +66,29 @@ export class AuthController {
         }
       }
 
-      const { code, expiresAt } = await OtpService.sendOtp(phone, purpose);
-      
-      const response: ApiResponse<OtpResponse> = {
-        success: true,
-        data: {
-          message: `OTP sent to ${phone}`,
-          expiresAt,
-        },
-        message: 'OTP sent successfully',
-      };
-      
-      res.status(200).json(response);
+      try {
+        const { code, expiresAt } = await OtpService.sendOtp(phone, purpose);
+        
+        const response: ApiResponse<OtpResponse> = {
+          success: true,
+          data: {
+            message: `OTP sent to ${phone}`,
+            expiresAt,
+          },
+          message: 'OTP sent successfully',
+        };
+        
+        res.status(200).json(response);
+      } catch (otpError) {
+        console.error('Failed to send OTP:', otpError);
+        
+        const response: ApiResponse = {
+          success: false,
+          error: otpError instanceof Error ? otpError.message : 'Failed to send OTP',
+        };
+        res.status(400).json(response);
+        return;
+      }
     } catch (error) {
       console.error('Error in sendOtp controller:', error);
       
@@ -82,7 +104,7 @@ export class AuthController {
   // POST /api/auth/verify-otp
   static async verifyOtp(req: TypedRequest<VerifyOtpRequest>, res: Response): Promise<void> {
     try {
-      const { phone, code, purpose = 'LOGIN' } = req.body;
+      const { phone, code, purpose = OtpPurpose.LOGIN } = req.body;
       
       if (!phone || !code) {
         const response: ApiResponse = {
@@ -107,7 +129,7 @@ export class AuthController {
 
       let user;
 
-      if (purpose === 'REGISTRATION') {
+      if (purpose === OtpPurpose.REGISTRATION) {
         // Get the unverified user and mark as verified
         user = await UserService.getUserByPhone(phone);
         if (!user) {
@@ -157,7 +179,7 @@ export class AuthController {
         success: true,
         data: {
           user,
-          message: purpose === 'REGISTRATION' ? 'Registration successful' : 'Login successful',
+          message: purpose === OtpPurpose.REGISTRATION ? 'Registration successful' : 'Login successful',
           // TODO: Add JWT token here in future
         },
         message: 'OTP verified successfully',
@@ -199,6 +221,17 @@ export class AuthController {
         return;
       }
 
+      // Validate phone number format before doing anything else
+      const { isValid, error: phoneError } = OtpService.cleanAndValidatePhone(phone);
+      if (!isValid) {
+        const response: ApiResponse = {
+          success: false,
+          error: phoneError || 'Invalid phone number format',
+        };
+        res.status(400).json(response);
+        return;
+      }
+
       // Check if user already exists
       const existingUser = await UserService.getUserByPhone(phone);
       if (existingUser) {
@@ -214,18 +247,30 @@ export class AuthController {
       await UserService.createUserWithPhone(phone, name, false);
 
       // Send OTP for registration
-      const { expiresAt } = await OtpService.sendOtp(phone, 'REGISTRATION');
-      
-      const response: ApiResponse<OtpResponse> = {
-        success: true,
-        data: {
-          message: `OTP sent to ${phone} for registration`,
-          expiresAt,
-        },
-        message: 'Registration initiated. Please verify OTP to complete registration.',
-      };
-      
-      res.status(200).json(response);
+      try {
+        const { expiresAt } = await OtpService.sendOtp(phone, OtpPurpose.REGISTRATION);
+        
+        const response: ApiResponse<OtpResponse> = {
+          success: true,
+          data: {
+            message: `OTP sent to ${phone} for registration`,
+            expiresAt,
+          },
+          message: 'Registration initiated. Please verify OTP to complete registration.',
+        };
+        
+        res.status(200).json(response);
+      } catch (otpError) {
+        // If OTP sending fails after user creation, we should handle this gracefully
+        console.error('Failed to send OTP after user creation:', otpError);
+        
+        const response: ApiResponse = {
+          success: false,
+          error: 'User created but failed to send verification OTP. Please try logging in to resend OTP.',
+        };
+        res.status(400).json(response);
+        return;
+      }
     } catch (error) {
       console.error('Error in registerWithPhone controller:', error);
       
@@ -252,6 +297,17 @@ export class AuthController {
         return;
       }
 
+      // Validate phone number format early
+      const { isValid, error: phoneError } = OtpService.cleanAndValidatePhone(phone);
+      if (!isValid) {
+        const response: ApiResponse = {
+          success: false,
+          error: phoneError || 'Invalid phone number format',
+        };
+        res.status(400).json(response);
+        return;
+      }
+
       // Check if user exists
       const existingUser = await UserService.getUserByPhone(phone);
       if (!existingUser) {
@@ -264,18 +320,29 @@ export class AuthController {
       }
 
       // Send OTP for login
-      const { expiresAt } = await OtpService.sendOtp(phone, 'LOGIN');
-      
-      const response: ApiResponse<OtpResponse> = {
-        success: true,
-        data: {
-          message: `OTP sent to ${phone} for login`,
-          expiresAt,
-        },
-        message: 'Login OTP sent. Please verify to complete login.',
-      };
-      
-      res.status(200).json(response);
+      try {
+        const { expiresAt } = await OtpService.sendOtp(phone, OtpPurpose.LOGIN);
+        
+        const response: ApiResponse<OtpResponse> = {
+          success: true,
+          data: {
+            message: `OTP sent to ${phone} for login`,
+            expiresAt,
+          },
+          message: 'Login OTP sent. Please verify to complete login.',
+        };
+        
+        res.status(200).json(response);
+      } catch (otpError) {
+        console.error('Failed to send login OTP:', otpError);
+        
+        const response: ApiResponse = {
+          success: false,
+          error: otpError instanceof Error ? otpError.message : 'Failed to send OTP',
+        };
+        res.status(400).json(response);
+        return;
+      }
     } catch (error) {
       console.error('Error in loginWithPhone controller:', error);
       

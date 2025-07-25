@@ -1,6 +1,7 @@
 import { prisma } from '../config/database';
-import { CreateUserRequest, UserResponse } from '../types';
+import { UserResponse, CreateUserRequest } from '../types';
 import { Prisma } from '@prisma/client';
+import { OtpService } from './otpService';
 
 export class UserService {
   // Get all users
@@ -50,7 +51,10 @@ export class UserService {
   // Get user by phone
   static async getUserByPhone(phone: string): Promise<UserResponse | null> {
     try {
-      const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+      const { cleanPhone, isValid } = OtpService.cleanAndValidatePhone(phone);
+      if (!isValid) {
+        return null; // Invalid phone format, user not found
+      }
       
       const user = await prisma.user.findUnique({
         where: { phone: cleanPhone },
@@ -73,25 +77,17 @@ export class UserService {
   // Create a new user
   static async createUser(userData: CreateUserRequest): Promise<UserResponse> {
     try {
-      // Clean phone number
-      const cleanPhone = userData.phone.replace(/[\s\-\(\)]/g, '');
-      
-      // Validate phone number format
-      const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-      if (!phoneRegex.test(cleanPhone)) {
-        throw new Error('Invalid phone number format');
+      // Validate phone if provided
+      if (userData.phone) {
+        const { cleanPhone, isValid, error } = OtpService.cleanAndValidatePhone(userData.phone);
+        if (!isValid) {
+          throw new Error(error || 'Invalid phone number format');
+        }
+        userData.phone = cleanPhone;
       }
 
-      // In a real application, you should hash the password here
-      // const hashedPassword = await bcrypt.hash(userData.password, 10);
-      
       const user = await prisma.user.create({
-        data: {
-          phone: cleanPhone,
-          email: userData.email,
-          name: userData.name,
-          password: userData.password, // In production, use hashedPassword
-        },
+        data: userData,
         select: {
           id: true,
           phone: true,
@@ -118,14 +114,17 @@ export class UserService {
           throw new Error('User already exists');
         }
       }
-      throw new Error('Failed to create user');
+      throw error instanceof Error ? error : new Error('Failed to create user');
     }
   }
 
   // Create user with phone verification
   static async createUserWithPhone(phone: string, name?: string, isVerified: boolean = true): Promise<UserResponse> {
     try {
-      const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+      const { cleanPhone, isValid, error } = OtpService.cleanAndValidatePhone(phone);
+      if (!isValid) {
+        throw new Error(error || 'Invalid phone number format');
+      }
       
       const user = await prisma.user.create({
         data: {
@@ -151,14 +150,17 @@ export class UserService {
           throw new Error('Phone number already exists');
         }
       }
-      throw new Error('Failed to create user');
+      throw error instanceof Error ? error : new Error('Failed to create user');
     }
   }
 
   // Mark user as verified by phone
   static async markUserAsVerified(phone: string): Promise<UserResponse | null> {
     try {
-      const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+      const { cleanPhone, isValid } = OtpService.cleanAndValidatePhone(phone);
+      if (!isValid) {
+        return null;
+      }
       
       const user = await prisma.user.update({
         where: { phone: cleanPhone },
@@ -188,6 +190,15 @@ export class UserService {
   // Update user
   static async updateUser(id: number, userData: Partial<CreateUserRequest>): Promise<UserResponse | null> {
     try {
+      // Validate phone if being updated
+      if (userData.phone) {
+        const { cleanPhone, isValid, error } = OtpService.cleanAndValidatePhone(userData.phone);
+        if (!isValid) {
+          throw new Error(error || 'Invalid phone number format');
+        }
+        userData.phone = cleanPhone;
+      }
+
       const user = await prisma.user.update({
         where: { id },
         data: userData,
@@ -212,7 +223,7 @@ export class UserService {
           throw new Error('Email already exists');
         }
       }
-      throw new Error('Failed to update user');
+      throw error instanceof Error ? error : new Error('Failed to update user');
     }
   }
 
