@@ -32,7 +32,9 @@ export interface OtpResponse {
 
 export interface LoginResponse {
   user: UserResponse;
-  token?: string; // For future JWT implementation
+  token: string; // Access token
+  refreshToken?: string; // Refresh token for future implementation
+  expiresIn: string; // Token expiry information
   message: string;
 }
 

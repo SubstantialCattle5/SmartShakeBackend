@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { OtpService } from '../services/otpService';
 import { UserService } from '../services/userService';
+import { JwtService } from '../services/jwtService';
 import { SendOtpRequest, VerifyOtpRequest, TypedRequest, ApiResponse, LoginResponse, OtpResponse, OtpPurpose } from '../types';
 
 export class AuthController {
@@ -175,12 +176,18 @@ export class AuthController {
         }
       }
 
+      // Generate JWT tokens
+      const token = JwtService.generateToken(user);
+      const refreshToken = JwtService.generateRefreshToken(user);
+
       const response: ApiResponse<LoginResponse> = {
         success: true,
         data: {
           user,
+          token,
+          refreshToken,
+          expiresIn: '7d',
           message: purpose === OtpPurpose.REGISTRATION ? 'Registration successful' : 'Login successful',
-          // TODO: Add JWT token here in future
         },
         message: 'OTP verified successfully',
       };
@@ -345,6 +352,137 @@ export class AuthController {
       }
     } catch (error) {
       console.error('Error in loginWithPhone controller:', error);
+      
+      const response: ApiResponse = {
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      };
+      
+      res.status(500).json(response);
+    }
+  }
+
+  // POST /api/auth/refresh-token
+  static async refreshToken(req: TypedRequest<{ refreshToken: string }>, res: Response): Promise<void> {
+    try {
+      const { refreshToken } = req.body;
+
+      if (!refreshToken) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Refresh token is required',
+        };
+        res.status(400).json(response);
+        return;
+      }
+
+      // Verify refresh token
+      try {
+        const decoded = JwtService.verifyToken(refreshToken);
+        
+        // Get user from database
+        const user = await UserService.getUserById(decoded.userId);
+        if (!user) {
+          const response: ApiResponse = {
+            success: false,
+            error: 'User not found',
+          };
+          res.status(404).json(response);
+          return;
+        }
+
+        // Generate new tokens
+        const newToken = JwtService.generateToken(user);
+        const newRefreshToken = JwtService.generateRefreshToken(user);
+
+        const response: ApiResponse<{ token: string; refreshToken: string; expiresIn: string }> = {
+          success: true,
+          data: {
+            token: newToken,
+            refreshToken: newRefreshToken,
+            expiresIn: '7d',
+          },
+          message: 'Token refreshed successfully',
+        };
+
+        res.status(200).json(response);
+      } catch (tokenError) {
+        console.error('Invalid refresh token:', tokenError);
+        
+        const response: ApiResponse = {
+          success: false,
+          error: 'Invalid or expired refresh token',
+        };
+        res.status(401).json(response);
+        return;
+      }
+    } catch (error) {
+      console.error('Error in refreshToken controller:', error);
+      
+      const response: ApiResponse = {
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      };
+      
+      res.status(500).json(response);
+    }
+  }
+
+  // GET /api/auth/profile - Get current user profile
+  static async getProfile(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Authentication required',
+        };
+        res.status(401).json(response);
+        return;
+      }
+
+      // Get full user data from database
+      const user = await UserService.getUserById(req.user.id);
+      if (!user) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'User not found',
+        };
+        res.status(404).json(response);
+        return;
+      }
+
+      const response: ApiResponse<{ user: typeof user }> = {
+        success: true,
+        data: { user },
+        message: 'Profile retrieved successfully',
+      };
+
+      res.status(200).json(response);
+    } catch (error) {
+      console.error('Error in getProfile controller:', error);
+      
+      const response: ApiResponse = {
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      };
+      
+      res.status(500).json(response);
+    }
+  }
+
+  // POST /api/auth/logout - Logout (for future token blacklisting)
+  static async logout(req: Request, res: Response): Promise<void> {
+    try {
+      // For now, just return success
+      // In a production app, you'd want to blacklist the token
+      const response: ApiResponse = {
+        success: true,
+        message: 'Logged out successfully',
+      };
+
+      res.status(200).json(response);
+    } catch (error) {
+      console.error('Error in logout controller:', error);
       
       const response: ApiResponse = {
         success: false,
