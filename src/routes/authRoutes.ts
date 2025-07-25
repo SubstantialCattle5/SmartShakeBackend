@@ -23,4 +23,7 @@ router.get('/profile', AuthMiddleware.authenticate, asyncHandler(AuthController.
 // POST /api/auth/logout - Logout (requires authentication)
 router.post('/logout', AuthMiddleware.authenticate, asyncHandler(AuthController.logout));
 
+// POST /api/auth/logout-all - Logout from all devices (requires authentication)
+router.post('/logout-all', AuthMiddleware.authenticate, asyncHandler(AuthController.logoutAll));
+
 export { router as authRoutes }; 

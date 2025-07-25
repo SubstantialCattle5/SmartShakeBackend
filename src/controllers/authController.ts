@@ -479,11 +479,34 @@ export class AuthController {
     }
   }
 
-  // POST /api/auth/logout - Logout (for future token blacklisting)
+  // POST /api/auth/logout - Logout with token blacklisting
   static async logout(req: Request, res: Response): Promise<void> {
     try {
-      // For now, just return success
-      // In a production app, you'd want to blacklist the token
+      if (!req.user) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Authentication required',
+        };
+        res.status(401).json(response);
+        return;
+      }
+
+      // Extract token from Authorization header
+      const authHeader = req.headers.authorization;
+      const token = JwtService.extractTokenFromHeader(authHeader);
+
+      if (!token) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'No token provided',
+        };
+        res.status(400).json(response);
+        return;
+      }
+
+      // Blacklist the current token
+      await JwtService.blacklistToken(token, req.user.id, 'logout');
+
       const response: ApiResponse = {
         success: true,
         message: 'Logged out successfully',
@@ -492,6 +515,39 @@ export class AuthController {
       res.status(200).json(response);
     } catch (error) {
       console.error('Error in logout controller:', error);
+      
+      const response: ApiResponse = {
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      };
+      
+      res.status(500).json(response);
+    }
+  }
+
+  // POST /api/auth/logout-all - Logout from all devices
+  static async logoutAll(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Authentication required',
+        };
+        res.status(401).json(response);
+        return;
+      }
+
+      // Blacklist all tokens for this user
+      await JwtService.blacklistAllUserTokens(req.user.id, 'logout_all_devices');
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Logged out from all devices successfully',
+      };
+
+      res.status(200).json(response);
+    } catch (error) {
+      console.error('Error in logoutAll controller:', error);
       
       const response: ApiResponse = {
         success: false,

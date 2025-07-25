@@ -1,5 +1,9 @@
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { UserResponse } from '../types';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 export interface JwtPayload {
   userId: number;
@@ -107,6 +111,123 @@ export class JwtService {
     } catch (error) {
       console.error('Error generating refresh token:', error);
       throw new Error('Failed to generate refresh token');
+    }
+  }
+
+  // Hash token for storage (security best practice)
+  private static hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  // Blacklist a token (for logout)
+  static async blacklistToken(token: string, userId: number, reason: string = 'logout'): Promise<void> {
+    try {
+      const decoded = this.decodeToken(token);
+      if (!decoded || !decoded.exp) {
+        throw new Error('Invalid token');
+      }
+
+      const tokenHash = this.hashToken(token);
+      const expiresAt = new Date(decoded.exp * 1000);
+
+      await prisma.blacklistedToken.create({
+        data: {
+          tokenHash,
+          userId,
+          expiresAt,
+          reason,
+        },
+      });
+    } catch (error) {
+      console.error('Error blacklisting token:', error);
+      throw new Error('Failed to blacklist token');
+    }
+  }
+
+  // Check if a token is blacklisted
+  static async isTokenBlacklisted(token: string): Promise<boolean> {
+    try {
+      const tokenHash = this.hashToken(token);
+      
+      const blacklistedToken = await prisma.blacklistedToken.findUnique({
+        where: {
+          tokenHash,
+        },
+      });
+
+      return !!blacklistedToken;
+    } catch (error) {
+      console.error('Error checking token blacklist:', error);
+      // In case of error, assume token is not blacklisted to avoid blocking valid users
+      return false;
+    }
+  }
+
+  // Blacklist all tokens for a user (logout from all devices)
+  static async blacklistAllUserTokens(userId: number, reason: string = 'logout_all_devices'): Promise<void> {
+    try {
+      // Get all active tokens for the user from database
+      // Since we don't store tokens directly, we'll create a future expiry date
+      // This will effectively invalidate all current tokens
+      const futureDate = new Date();
+      futureDate.setFullYear(futureDate.getFullYear() + 1); // 1 year from now
+
+      // Create a special blacklist entry for all tokens
+      await prisma.blacklistedToken.create({
+        data: {
+          tokenHash: `ALL_TOKENS_${userId}_${Date.now()}`, // Unique identifier
+          userId,
+          expiresAt: futureDate,
+          reason,
+        },
+      });
+    } catch (error) {
+      console.error('Error blacklisting all user tokens:', error);
+      throw new Error('Failed to blacklist all tokens');
+    }
+  }
+
+  // Check if all tokens for a user are blacklisted (logout from all devices)
+  static async areAllUserTokensBlacklisted(userId: number, tokenIssuedAt: number): Promise<boolean> {
+    try {
+      const blacklistEntry = await prisma.blacklistedToken.findFirst({
+        where: {
+          userId,
+          tokenHash: {
+            startsWith: `ALL_TOKENS_${userId}_`,
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+
+      if (!blacklistEntry) {
+        return false;
+      }
+
+      // Check if the blacklist entry was created after the token was issued
+      const blacklistCreatedAt = Math.floor(blacklistEntry.createdAt.getTime() / 1000);
+      return blacklistCreatedAt > tokenIssuedAt;
+    } catch (error) {
+      console.error('Error checking all tokens blacklist:', error);
+      return false;
+    }
+  }
+
+  // Clean up expired blacklisted tokens (should be run periodically)
+  static async cleanupExpiredBlacklistedTokens(): Promise<void> {
+    try {
+      const now = new Date();
+      await prisma.blacklistedToken.deleteMany({
+        where: {
+          expiresAt: {
+            lt: now,
+          },
+        },
+      });
+    } catch (error) {
+      console.error('Error cleaning up expired blacklisted tokens:', error);
     }
   }
 } 

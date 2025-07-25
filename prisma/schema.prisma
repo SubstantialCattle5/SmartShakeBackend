@@ -22,6 +22,7 @@ model User {
 
   // Relations
   otpCodes    OtpCode[]
+  blacklistedTokens BlacklistedToken[]
 
   @@map("users")
 }
@@ -40,6 +41,21 @@ model OtpCode {
   @@map("otp_codes")
   @@index([phone, purpose])
   @@index([code])
+}
+
+model BlacklistedToken {
+  id        Int      @id @default(autoincrement())
+  tokenHash String   @unique  // Hash of the JWT token for security
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime // When the original token expires
+  reason    String?  // Optional reason for blacklisting (logout, security, etc.)
+  createdAt DateTime @default(now())
+
+  @@map("blacklisted_tokens")
+  @@index([tokenHash])
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 enum OtpPurpose {

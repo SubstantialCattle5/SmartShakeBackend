@@ -40,8 +40,31 @@ export class AuthMiddleware {
         return;
       }
 
-      // Verify the token
+      // Verify the token first
       const decoded: JwtPayload = JwtService.verifyToken(token);
+
+      // Check if token is blacklisted
+      const isBlacklisted = await JwtService.isTokenBlacklisted(token);
+      if (isBlacklisted) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Token has been invalidated. Please login again.',
+        };
+        res.status(401).json(response);
+        return;
+      }
+
+      // Check if all tokens for this user are blacklisted (logout from all devices)
+      const tokenIssuedAt = decoded.iat || 0;
+      const allTokensBlacklisted = await JwtService.areAllUserTokensBlacklisted(decoded.userId, tokenIssuedAt);
+      if (allTokensBlacklisted) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'All sessions have been invalidated. Please login again.',
+        };
+        res.status(401).json(response);
+        return;
+      }
 
       // Get user from database to ensure they still exist and are active
       const user = await UserService.getUserById(decoded.userId);
@@ -117,14 +140,25 @@ export class AuthMiddleware {
       if (token) {
         try {
           const decoded: JwtPayload = JwtService.verifyToken(token);
-          const user = await UserService.getUserById(decoded.userId);
           
-          if (user) {
-            req.user = {
-              id: user.id,
-              phone: user.phone,
-              isVerified: user.isVerified,
-            };
+          // Check if token is blacklisted
+          const isBlacklisted = await JwtService.isTokenBlacklisted(token);
+          if (!isBlacklisted) {
+            // Check if all tokens for this user are blacklisted
+            const tokenIssuedAt = decoded.iat || 0;
+            const allTokensBlacklisted = await JwtService.areAllUserTokensBlacklisted(decoded.userId, tokenIssuedAt);
+            
+            if (!allTokensBlacklisted) {
+              const user = await UserService.getUserById(decoded.userId);
+              
+              if (user) {
+                req.user = {
+                  id: user.id,
+                  phone: user.phone,
+                  isVerified: user.isVerified,
+                };
+              }
+            }
           }
         } catch (error) {
           // Ignore token errors in optional auth

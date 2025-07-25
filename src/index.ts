@@ -1,5 +1,6 @@
 import { app } from './app';
 import { disconnectDatabase } from './config/database';
+import { CleanupService } from './services/cleanupService';
 
 const PORT = process.env.PORT || 3000;
 
@@ -8,6 +9,9 @@ const gracefulShutdown = async (signal: string) => {
   console.log(`${signal} received. Shutting down gracefully...`);
   
   try {
+    // Stop cleanup service
+    CleanupService.stopPeriodicCleanup();
+    
     await disconnectDatabase();
     console.log('Database disconnected successfully');
     process.exit(0);
@@ -40,6 +44,9 @@ const server = app.listen(PORT, () => {
   console.log(`🗄️  Database health: http://localhost:${PORT}/health/database`);
   console.log(`👥 Users API: http://localhost:${PORT}/api/users`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  
+  // Start cleanup service for blacklisted tokens
+  CleanupService.startPeriodicCleanup(24); // Run every 24 hours
 });
 
 export { app, server }; 
