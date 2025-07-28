@@ -3,6 +3,7 @@ import { userRoutes } from './userRoutes';
 import { healthRoutes } from './healthRoutes';
 import { authRoutes } from './authRoutes';
 import voucherRoutes from './voucherRoutes';
+import consumptionRoutes from './consumptionRoutes';
 
 const router = Router();
 
@@ -13,5 +14,6 @@ router.use('/health', healthRoutes);
 router.use('/api/auth', authRoutes);
 router.use('/api/users', userRoutes);
 router.use('/api/vouchers', voucherRoutes);
+router.use('/api/consumption', consumptionRoutes);
 
 export { router as routes }; 

@@ -326,6 +326,340 @@ Content-Type: application/json
 }
 ```
 
+### Consumption Endpoints
+
+#### Machine-First Consumption Flow (Recommended)
+
+##### 1. Start Session with Pre-Selected Drink
+
+```http
+POST /api/consumption/session/start
+Authorization: Bearer your-access-token
+Content-Type: application/json
+
+{
+  "machineQrCode": "QR_VM_GYM_ANDHERI_01|DRINK:Cola|SLOT:A1|PRICE:25"
+}
+```
+
+Response (with pre-selected drink):
+```json
+{
+  "success": true,
+  "data": {
+    "session": {
+      "sessionId": "MSS_1706456789123_AB12CD_EF",
+      "machineId": "VM_GYM_ANDHERI_01",
+      "expiresAt": "2024-01-28T17:05:00.000Z",
+      "status": "ACTIVE",
+      "selectedDrink": {
+        "type": "Cola",
+        "slot": "A1",
+        "price": 25
+      }
+    },
+    "machine": {
+      "id": "VM_GYM_ANDHERI_01",
+      "name": "Andheri Gym Machine",
+      "location": "Gold's Gym, Andheri West"
+    },
+    "preSelectedDrink": {
+      "drinkType": "Cola",
+      "drinkSlot": "A1",
+      "price": 25
+    },
+    "availableVouchers": [
+      {
+        "id": 456,
+        "voucherNumber": "VCH-12345678-EFGH",
+        "remainingDrinks": 12,
+        "totalDrinks": 20
+      }
+    ],
+    "readyForPayment": true,
+    "message": "Cola selected. Choose voucher to pay."
+  }
+}
+```
+
+##### 2. Process Voucher Payment
+
+```http
+POST /api/consumption/session/pay
+Authorization: Bearer your-access-token
+Content-Type: application/json
+
+{
+  "sessionId": "MSS_1706456789123_AB12CD_EF",
+  "voucherId": 456
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "consumption": {
+      "id": 789,
+      "quantity": 1,
+      "drinkType": "Cola",
+      "drinkSlot": "A1",
+      "location": "Gold's Gym, Andheri West",
+      "consumedAt": "2024-01-28T16:30:00.000Z",
+      "preConsumptionBalance": 12,
+      "postConsumptionBalance": 11
+    },
+    "voucher": {
+      "id": 456,
+      "voucherNumber": "VCH-12345678-EFGH",
+      "remainingDrinks": 11,
+      "totalDrinks": 20,
+      "consumedDrinks": 9
+    },
+    "readyForDispense": true,
+    "message": "Payment successful! Machine can now dispense your drink."
+  }
+}
+```
+
+#### App-First Consumption Flow (Alternative)
+
+##### 1. Start Session (No Pre-Selection)
+
+```http
+POST /api/consumption/session/start
+Authorization: Bearer your-access-token
+Content-Type: application/json
+
+{
+  "machineQrCode": "QR_VM_GYM_ANDHERI_01"
+}
+```
+
+Response (without pre-selected drink):
+```json
+{
+  "success": true,
+  "data": {
+    "session": {
+      "sessionId": "MSS_1706456789123_AB12CD_EF",
+      "machineId": "VM_GYM_ANDHERI_01",
+      "expiresAt": "2024-01-28T17:05:00.000Z",
+      "status": "ACTIVE",
+      "selectedDrink": null
+    },
+    "machine": {
+      "id": "VM_GYM_ANDHERI_01",
+      "name": "Andheri Gym Machine",
+      "location": "Gold's Gym, Andheri West"
+    },
+    "availableVouchers": [
+      {
+        "id": 456,
+        "voucherNumber": "VCH-12345678-EFGH",
+        "remainingDrinks": 12,
+        "totalDrinks": 20
+      }
+    ],
+    "drinkOptions": [
+      { "id": "cola", "name": "Cola", "slot": "A1", "price": 25 },
+      { "id": "water", "name": "Water", "slot": "A2", "price": 20 }
+    ],
+    "message": "Select a drink to continue"
+  }
+}
+```
+
+##### 2. Select Voucher for Session
+
+```http
+POST /api/consumption/session/voucher
+Authorization: Bearer your-access-token
+Content-Type: application/json
+
+{
+  "sessionId": "MSS_1706456789123_AB12CD_EF",
+  "voucherId": 456
+}
+```
+
+##### 3. Select Drink for Session
+
+```http
+POST /api/consumption/session/drink
+Authorization: Bearer your-access-token
+Content-Type: application/json
+
+{
+  "sessionId": "MSS_1706456789123_AB12CD_EF",
+  "drinkType": "Cola",
+  "drinkSlot": "A1",
+  "price": 25
+}
+```
+
+##### 4. Process Session Consumption
+
+```http
+POST /api/consumption/session/consume
+Authorization: Bearer your-access-token
+Content-Type: application/json
+
+{
+  "sessionId": "MSS_1706456789123_AB12CD_EF",
+  "quantity": 1
+}
+```
+
+##### 5. Cancel Session
+
+```http
+POST /api/consumption/session/cancel
+Authorization: Bearer your-access-token
+Content-Type: application/json
+
+{
+  "sessionId": "MSS_1706456789123_AB12CD_EF",
+  "reason": "User cancelled"
+}
+```
+
+##### 6. Get Session Status
+
+```http
+GET /api/consumption/session/{sessionId}
+Authorization: Bearer your-access-token
+```
+
+##### 7. Get User's Active Sessions
+
+```http
+GET /api/consumption/sessions
+Authorization: Bearer your-access-token
+```
+
+#### Legacy Consumption Endpoints
+
+##### 1. Validate Machine QR Code
+
+```http
+POST /api/consumption/machine/validate
+Content-Type: application/json
+
+{
+  "qrCode": "QR_VM_GYM_ANDHERI_01"
+}
+```
+
+##### 2. Simulate Machine Scan
+
+```http
+POST /api/consumption/scan
+Authorization: Bearer your-access-token
+Content-Type: application/json
+
+{
+  "machineQrCode": "QR_VM_GYM_ANDHERI_01"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "machine": {
+      "id": "VM_GYM_ANDHERI_01",
+      "name": "Andheri Gym Machine",
+      "location": "Gold's Gym, Andheri West"
+    },
+    "availableVouchers": [
+      {
+        "id": 456,
+        "voucherNumber": "VCH-12345678-EFGH",
+        "remainingDrinks": 12,
+        "totalDrinks": 20
+      }
+    ],
+    "drinkOptions": [
+      { "id": "cola", "name": "Cola", "slot": "A1" },
+      { "id": "water", "name": "Water", "slot": "A2" }
+    ]
+  }
+}
+```
+
+#### 3. Validate Consumption
+
+```http
+POST /api/consumption/validate
+Authorization: Bearer your-access-token
+Content-Type: application/json
+
+{
+  "voucherId": 456,
+  "machineQrCode": "QR_VM_GYM_ANDHERI_01",
+  "quantity": 1
+}
+```
+
+#### 4. Process Consumption
+
+```http
+POST /api/consumption/process
+Authorization: Bearer your-access-token
+Content-Type: application/json
+
+{
+  "voucherId": 456,
+  "machineId": "VM_GYM_ANDHERI_01",
+  "quantity": 1,
+  "drinkType": "Cola",
+  "drinkSlot": "A1",
+  "sessionId": "SESSION_123456"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "consumption": {
+      "id": 789,
+      "quantity": 1,
+      "drinkType": "Cola",
+      "location": "Gold's Gym, Andheri West",
+      "consumedAt": "2024-01-28T16:30:00.000Z",
+      "preConsumptionBalance": 12,
+      "postConsumptionBalance": 11
+    },
+    "voucher": {
+      "id": 456,
+      "voucherNumber": "VCH-12345678-EFGH",
+      "remainingDrinks": 11,
+      "totalDrinks": 20,
+      "consumedDrinks": 9
+    }
+  }
+}
+```
+
+#### 5. Get Consumption History
+
+```http
+GET /api/consumption/history?limit=20
+Authorization: Bearer your-access-token
+```
+
+#### 6. Get Consumption Statistics
+
+```http
+GET /api/consumption/stats
+Authorization: Bearer your-access-token
+```
+
 ### User Management Endpoints
 
 #### 1. Get All Users
@@ -503,6 +837,134 @@ GET /api/vouchers
 - **EXPIRED**: Past expiry date
 - **SUSPENDED**: Temporarily disabled
 - **CANCELLED**: Refunded/cancelled
+
+## 🍹 Consumption Flow
+
+The consumption flow allows users to use their vouchers at vending machines by scanning QR codes.
+
+### Machine-First Consumption Process (Recommended)
+
+```bash
+# 1. User selects drink at physical machine (Coca Cola, Slot A1)
+# 2. Machine shows "Pay with Voucher" option
+# 3. Machine displays QR code with drink selection:
+#    "QR_VM_GYM_ANDHERI_01|DRINK:Cola|SLOT:A1|PRICE:25"
+
+# 4. User scans QR code with app
+POST /api/consumption/session/start
+{
+  "machineQrCode": "QR_VM_GYM_ANDHERI_01|DRINK:Cola|SLOT:A1|PRICE:25"
+}
+# Returns: sessionId, available vouchers, pre-selected drink
+
+# 5. User selects voucher to pay
+POST /api/consumption/session/pay
+{
+  "sessionId": "MSS_1706456789123_AB12CD_EF",
+  "voucherId": 456
+}
+# Returns: payment confirmation, readyForDispense: true
+
+# 6. Machine checks payment status and dispenses drink
+# 7. Check updated balance
+GET /api/vouchers/456
+```
+
+### App-First Consumption Process (Alternative)
+
+```bash
+# 1. User scans machine QR code and starts session
+POST /api/consumption/session/start
+{
+  "machineQrCode": "QR_VM_GYM_ANDHERI_01"
+}
+# Returns: sessionId, available vouchers, drink options
+
+# 2. User selects voucher for session
+POST /api/consumption/session/voucher
+{
+  "sessionId": "MSS_1706456789123_AB12CD_EF",
+  "voucherId": 456
+}
+
+# 3. User selects drink from app
+POST /api/consumption/session/drink
+{
+  "sessionId": "MSS_1706456789123_AB12CD_EF",
+  "drinkType": "Cola",
+  "drinkSlot": "A1",
+  "price": 25
+}
+
+# 4. System processes consumption atomically
+POST /api/consumption/session/consume
+{
+  "sessionId": "MSS_1706456789123_AB12CD_EF",
+  "quantity": 1
+}
+# Automatically completes session
+
+# 5. Check updated balance
+GET /api/vouchers/456
+```
+
+### Legacy Consumption Process (Deprecated)
+
+```bash
+# 1. User scans machine QR code
+POST /api/consumption/scan
+{
+  "machineQrCode": "QR_VM_GYM_ANDHERI_01"
+}
+
+# 2. User selects voucher and drink, validates consumption
+POST /api/consumption/validate
+{
+  "voucherId": 456,
+  "machineQrCode": "QR_VM_GYM_ANDHERI_01",
+  "quantity": 1
+}
+
+# 3. User confirms, system processes consumption
+POST /api/consumption/process
+{
+  "voucherId": 456,
+  "machineId": "VM_GYM_ANDHERI_01",
+  "quantity": 1,
+  "drinkType": "Cola",
+  "drinkSlot": "A1"
+}
+
+# 4. Check updated balance
+GET /api/vouchers/456
+```
+
+### Consumption Security
+
+- **Session Management**: Stateful sessions with automatic expiry (10 minutes)
+- **Optimistic Locking**: Prevents race conditions using version numbers
+- **Balance Validation**: Ensures sufficient voucher balance before consumption
+- **Machine Verification**: Only active, online machines can process transactions
+- **Session Isolation**: Each user session is isolated and validated
+- **Concurrent Session Limits**: Max 3 sessions per user, 5 per machine
+- **Automatic Cleanup**: Expired sessions auto-removed every 5 minutes
+- **Session Ownership**: Users can only access their own sessions
+- **Audit Trail**: Complete before/after balance tracking with session IDs
+
+### Session Lifecycle
+
+1. **ACTIVE**: Session ready for voucher/drink selection
+2. **COMPLETED**: Successfully processed consumption
+3. **EXPIRED**: Session timed out (10 minutes)
+4. **CANCELLED**: Manually cancelled by user
+
+### Session Security Features
+
+- **IP Tracking**: Sessions track client IP addresses
+- **User Agent Tracking**: Browser/app identification
+- **Expiry Management**: Automatic session timeout protection
+- **Machine State Validation**: Real-time machine status checking
+- **Concurrent Protection**: Prevents session conflicts
 
 ### Security Features
 

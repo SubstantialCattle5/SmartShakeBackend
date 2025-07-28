@@ -9,8 +9,9 @@ const gracefulShutdown = async (signal: string) => {
   console.log(`${signal} received. Shutting down gracefully...`);
   
   try {
-    // Stop cleanup service
+    // Stop cleanup services
     CleanupService.stopPeriodicCleanup();
+    console.log('Cleanup service stopped');
     
     await disconnectDatabase();
     console.log('Database disconnected successfully');
@@ -47,6 +48,7 @@ const server = app.listen(PORT, () => {
   
   // Start cleanup service for blacklisted tokens
   CleanupService.startPeriodicCleanup(24); // Run every 24 hours
+  
 });
 
 export { app, server }; 
