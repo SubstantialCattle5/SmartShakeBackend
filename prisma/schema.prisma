@@ -19,6 +19,8 @@ model User {
   isVerified  Boolean  @default(false)
   qrCode      String?  @unique  // QR code for vending machine access
   isActive    Boolean  @default(true)
+  role        UserRole @default(USER)  // USER, ADMIN, TECH
+  lastLoginAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -31,8 +33,14 @@ model User {
   drinkConsumptions DrinkConsumption[]
   paymentMethods    PaymentMethod[]
   transactions      Transaction[]
+  
+  // Feedback Relations
+  feedbacks         Feedback[]
+  feedbackResponses FeedbackResponse[]
 
   @@map("users")
+  @@index([role])
+  @@index([isActive, role])
 }
 
 model OtpCode {
@@ -80,6 +88,8 @@ model DrinkProduct {
   imageUrl    String?
   isActive    Boolean  @default(true)
   nutritionInfo Json?  // Calories, protein, etc.
+  averageRating Decimal? @db.Decimal(3, 2)  // Average user rating (1.00-5.00)
+  totalReviews  Int     @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -87,8 +97,11 @@ model DrinkProduct {
   packageItems      PackageItem[]
   drinkConsumptions DrinkConsumption[]
   orderItems        OrderItem[]
+  feedbacks         Feedback[]
 
   @@map("drink_products")
+  @@index([isActive])
+  @@index([averageRating])
 }
 
 // ========================================
@@ -105,14 +118,19 @@ model SubscriptionPackage {
   validityDays    Int      // How long package is valid (e.g., 30 days)
   isActive        Boolean  @default(true)
   category        String?  // e.g., "gym", "office", "student"
+  averageRating   Decimal? @db.Decimal(3, 2)  // Average package rating
+  totalReviews    Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   // Relations
   packageItems  PackageItem[]
   subscriptions UserSubscription[]
+  feedbacks     Feedback[]
 
   @@map("subscription_packages")
+  @@index([isActive])
+  @@index([category])
 }
 
 model PackageItem {
@@ -150,6 +168,7 @@ model UserSubscription {
   drinkConsumptions DrinkConsumption[]
   order             Order?   @relation(fields: [orderId], references: [id])
   orderId           Int?
+  feedbacks         Feedback[]
 
   @@map("user_subscriptions")
   @@index([userId, status])
@@ -183,6 +202,86 @@ model DrinkConsumption {
   @@index([userId, consumedAt])
   @@index([subscriptionId])
   @@index([externalTransactionId])
+}
+
+// ========================================
+// FEEDBACK SYSTEM
+// ========================================
+
+model Feedback {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Feedback can be about different entities
+  feedbackType FeedbackType
+  productId    Int?     // Feedback about specific drink
+  product      DrinkProduct? @relation(fields: [productId], references: [id])
+  packageId    Int?     // Feedback about subscription package
+  package      SubscriptionPackage? @relation(fields: [packageId], references: [id])
+  subscriptionId Int?   // Feedback about user's subscription experience
+  subscription UserSubscription? @relation(fields: [subscriptionId], references: [id])
+  machineId    String? // Feedback about specific vending machine
+  
+  // Feedback content
+  rating       Int      // 1-5 star rating
+  title        String?  // Brief title
+  comment      String   // Detailed feedback
+  category     FeedbackCategory // QUALITY, SERVICE, TECHNICAL, etc.
+  priority     FeedbackPriority @default(MEDIUM)
+  status       FeedbackStatus @default(NEW)
+  
+  // Metadata
+  isAnonymous  Boolean  @default(false)
+  deviceInfo   Json?    // App version, device type, etc.
+  location     String?  // Where feedback was given
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  responses    FeedbackResponse[]
+  attachments  FeedbackAttachment[]
+
+  @@map("feedbacks")
+  @@index([userId, status])
+  @@index([feedbackType, status])
+  @@index([rating, createdAt])
+  @@index([category, priority])
+}
+
+model FeedbackResponse {
+  id         Int      @id @default(autoincrement())
+  feedbackId Int
+  feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  responderId Int      // Admin/Tech user who responded
+  responder  User     @relation(fields: [responderId], references: [id])
+  
+  message    String   // Response message
+  isInternal Boolean  @default(false)  // Internal note or customer-facing response
+  actionTaken String? // What action was taken
+  
+  createdAt  DateTime @default(now())
+
+  @@map("feedback_responses")
+  @@index([feedbackId])
+  @@index([responderId])
+}
+
+model FeedbackAttachment {
+  id         Int      @id @default(autoincrement())
+  feedbackId Int
+  feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  
+  fileName   String
+  fileUrl    String   // S3 or cloud storage URL
+  fileType   String   // image, video, document
+  fileSize   Int?     // Size in bytes
+  
+  createdAt  DateTime @default(now())
+
+  @@map("feedback_attachments")
+  @@index([feedbackId])
 }
 
 // ========================================
@@ -290,6 +389,8 @@ model VendingMachineReference {
   location    String   // Location description
   city        String
   isActive    Boolean  @default(true)
+  averageRating Decimal? @db.Decimal(3, 2)  // Average machine rating
+  totalReviews  Int     @default(0)
   lastSync    DateTime? // Last sync with vending backend
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -307,6 +408,12 @@ enum OtpPurpose {
   LOGIN
   REGISTRATION
   PASSWORD_RESET
+}
+
+enum UserRole {
+  USER        // Regular customers
+  TECH        // Technical support staff
+  ADMIN       // System administrators
 }
 
 enum SubscriptionStatus {
@@ -361,4 +468,41 @@ enum TransactionType {
   PAYMENT
   REFUND
   ADJUSTMENT
+}
+
+enum FeedbackType {
+  PRODUCT       // About specific drink
+  PACKAGE       // About subscription package
+  MACHINE       // About vending machine
+  SERVICE       // About overall service
+  SUBSCRIPTION  // About subscription experience
+  APP           // About mobile app
+  GENERAL       // General feedback
+}
+
+enum FeedbackCategory {
+  QUALITY       // Product quality issues
+  SERVICE       // Customer service
+  TECHNICAL     // Technical/app issues
+  PRICING       // Pricing concerns
+  DELIVERY      // Machine availability/reliability
+  FEATURE_REQUEST // New feature suggestions
+  COMPLAINT     // General complaints
+  COMPLIMENT    // Positive feedback
+}
+
+enum FeedbackPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum FeedbackStatus {
+  NEW           // Just submitted
+  ACKNOWLEDGED  // Seen by support team
+  IN_PROGRESS   // Being worked on
+  RESOLVED      // Issue fixed
+  CLOSED        // Feedback closed
+  REOPENED      // Reopened after being closed
 } 
