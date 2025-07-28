@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { JwtService, JwtPayload } from '../services/jwtService';
 import { UserService } from '../services/userService';
 import { ApiResponse } from '../types';
+import { UserRole } from '@prisma/client';
 
 // Extend Request interface to include user information
 declare global {
@@ -11,6 +12,7 @@ declare global {
         id: number;
         phone: string;
         isVerified: boolean;
+        role: UserRole;
       };
     }
   }
@@ -21,6 +23,7 @@ export interface AuthenticatedRequest extends Request {
     id: number;
     phone: string;
     isVerified: boolean;
+    role: UserRole;
   };
 }
 
@@ -82,6 +85,7 @@ export class AuthMiddleware {
         id: user.id,
         phone: user.phone,
         isVerified: user.isVerified,
+        role: user.role,
       };
 
       next();
@@ -156,6 +160,7 @@ export class AuthMiddleware {
                   id: user.id,
                   phone: user.phone,
                   isVerified: user.isVerified,
+                  role: user.role,
                 };
               }
             }
@@ -171,6 +176,108 @@ export class AuthMiddleware {
       // Don't fail the request for optional auth
       console.error('Optional auth error (ignored):', error);
       next();
+    }
+  }
+
+  // Middleware to check if user has admin role
+  static async requireAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Authentication required',
+        };
+        res.status(401).json(response);
+        return;
+      }
+
+      if (req.user.role !== UserRole.ADMIN) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Admin access required',
+        };
+        res.status(403).json(response);
+        return;
+      }
+
+      next();
+    } catch (error) {
+      console.error('Admin check error:', error);
+      
+      const response: ApiResponse = {
+        success: false,
+        error: 'Admin access check failed',
+      };
+      
+      res.status(403).json(response);
+    }
+  }
+
+  // Middleware to check if user has tech role
+  static async requireTech(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Authentication required',
+        };
+        res.status(401).json(response);
+        return;
+      }
+
+      if (req.user.role !== UserRole.TECH) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Technical support access required',
+        };
+        res.status(403).json(response);
+        return;
+      }
+
+      next();
+    } catch (error) {
+      console.error('Tech check error:', error);
+      
+      const response: ApiResponse = {
+        success: false,
+        error: 'Tech access check failed',
+      };
+      
+      res.status(403).json(response);
+    }
+  }
+
+  // Middleware to check if user has admin or tech role
+  static async requireAdminOrTech(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Authentication required',
+        };
+        res.status(401).json(response);
+        return;
+      }
+
+      if (req.user.role !== UserRole.ADMIN && req.user.role !== UserRole.TECH) {
+        const response: ApiResponse = {
+          success: false,
+          error: 'Admin or technical support access required',
+        };
+        res.status(403).json(response);
+        return;
+      }
+
+      next();
+    } catch (error) {
+      console.error('Admin/Tech check error:', error);
+      
+      const response: ApiResponse = {
+        success: false,
+        error: 'Admin/Tech access check failed',
+      };
+      
+      res.status(403).json(response);
     }
   }
 } 

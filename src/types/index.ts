@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { User, OtpCode, OtpPurpose, Prisma } from '@prisma/client';
+import { User, OtpCode, OtpPurpose, UserRole, Prisma } from '@prisma/client';
 
 // API Response types
 export interface ApiResponse<T = any> {
@@ -87,4 +87,4 @@ export interface DrinkStats {
 }
 
 // Re-export Prisma types for convenience
-export { User, OtpCode, OtpPurpose, Prisma }; 
+export { User, OtpCode, OtpPurpose, UserRole, Prisma }; 

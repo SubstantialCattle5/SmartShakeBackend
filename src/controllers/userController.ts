@@ -167,7 +167,7 @@ export class UserController {
     }
   }
 
-  // DELETE /api/users/:id
+  // DELETE /api/users/:id - Soft delete user
   static async deleteUser(req: Request, res: Response): Promise<void> {
     try {
       const userId = parseInt(req.params.id);
@@ -186,7 +186,7 @@ export class UserController {
       if (!deleted) {
         const response: ApiResponse = {
           success: false,
-          error: 'User not found',
+          error: 'User not found or already deleted',
         };
         res.status(404).json(response);
         return;
@@ -194,7 +194,7 @@ export class UserController {
 
       const response: ApiResponse = {
         success: true,
-        message: 'User deleted successfully',
+        message: 'User marked as deleted successfully',
       };
       
       res.status(200).json(response);

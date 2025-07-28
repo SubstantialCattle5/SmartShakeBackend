@@ -1,14 +1,16 @@
 import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
 import { UserResponse } from '../types';
-import { PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { createHash } from 'crypto';
+import { prisma } from '../config/database';
+import { UserRole } from '@prisma/client';
 
-const prisma = new PrismaClient();
-
+// JWT Payload interface
 export interface JwtPayload {
   userId: number;
   phone: string;
   isVerified: boolean;
+  role: UserRole;
   iat?: number;
   exp?: number;
 }
@@ -23,6 +25,7 @@ export class JwtService {
       userId: user.id,
       phone: user.phone,
       isVerified: user.isVerified,
+      role: user.role, // Assuming UserResponse includes a 'role' field
       exp: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60), // 7 days
     };
 
@@ -102,6 +105,7 @@ export class JwtService {
       userId: user.id,
       phone: user.phone,
       isVerified: user.isVerified,
+      role: user.role, // Assuming UserResponse includes a 'role' field
       exp: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60), // 30 days
     };
 
@@ -116,7 +120,7 @@ export class JwtService {
 
   // Hash token for storage (security best practice)
   private static hashToken(token: string): string {
-    return crypto.createHash('sha256').update(token).digest('hex');
+    return createHash('sha256').update(token).digest('hex');
   }
 
   // Blacklist a token (for logout)

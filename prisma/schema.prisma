@@ -19,6 +19,7 @@ model User {
   isVerified  Boolean  @default(false)
   qrCode      String?  @unique  // QR code for vending machine access
   isActive    Boolean  @default(true)
+  deleted     Boolean  @default(false)  // Soft delete flag
   role        UserRole @default(USER)  // USER, ADMIN, TECH
   lastLoginAt DateTime?
   createdAt   DateTime @default(now())
@@ -41,6 +42,7 @@ model User {
   @@map("users")
   @@index([role])
   @@index([isActive, role])
+  @@index([deleted])
 }
 
 model OtpCode {

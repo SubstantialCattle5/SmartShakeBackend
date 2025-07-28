@@ -332,10 +332,58 @@ Authorization: Bearer your-access-token
 ### Security Features
 
 - **Rate Limiting**: Maximum 5 OTP requests per hour per phone number
-- **Token Blacklisting**: Logout invalidates tokens permanently
-- **Secure Headers**: Helmet.js for security headers
-- **CORS Protection**: Configurable CORS policies
-- **Input Validation**: Comprehensive request validation
+- **Token Blacklisting**: Secure logout with token invalidation
+- **JWT Authentication**: Secure access tokens with blacklist checking
+- **Refresh Tokens**: Long-lived tokens for seamless authentication renewal
+- **Role-Based Access Control**: Admin and technical support role restrictions
+
+## 🔒 Role-Based Access Control
+
+The system includes three user roles:
+
+- **USER**: Regular customers (default role)
+- **TECH**: Technical support staff 
+- **ADMIN**: System administrators
+
+### Protected Endpoints
+
+#### Admin Only
+- `POST /api/users` - Create user
+
+#### Admin or Tech Only  
+- `GET /api/users` - Get all users
+- `GET /api/users/:id` - Get user by ID
+- `PUT /api/users/:id` - Update user
+- `DELETE /api/users/:id` - Soft delete user (sets deleted flag to true)
+
+### Soft Delete System
+
+Users are never permanently deleted from the database. Instead, they are marked with a `deleted: true` flag:
+
+- **Soft Delete**: `DELETE /api/users/:id` marks user as deleted
+- **Filtered Queries**: All user queries automatically exclude deleted users
+- **Data Preservation**: User data remains in database for audit/recovery purposes
+- **Cascade Safety**: Related data (subscriptions, orders, etc.) is preserved
+
+**Behavior After Soft Delete:**
+- User cannot login (filtered out of authentication queries)
+- User won't appear in user lists or searches
+- User's related data (orders, subscriptions) remains intact
+- Phone number becomes available for new registrations
+
+### Role Assignment
+
+Roles are assigned during user creation. By default, users get the `USER` role through the registration process. Admin and Tech roles must be assigned manually in the database or through admin user management endpoints.
+
+### Error Responses
+
+When accessing protected endpoints without proper role:
+```json
+{
+  "success": false,
+  "error": "Admin or technical support access required"
+}
+```
 
 ## 🐳 Docker Deployment
 

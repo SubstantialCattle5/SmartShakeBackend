@@ -8,6 +8,9 @@ export class UserService {
   static async getAllUsers(): Promise<UserResponse[]> {
     try {
       const users = await prisma.user.findMany({
+        where: {
+          deleted: false,
+        },
         select: {
           id: true,
           phone: true,
@@ -16,6 +19,7 @@ export class UserService {
           isVerified: true,
           qrCode: true,
           isActive: true,
+          deleted: true,
           role: true,
           lastLoginAt: true,
           createdAt: true,
@@ -31,11 +35,10 @@ export class UserService {
     }
   }
 
-  // Get user by ID
-  static async getUserById(id: number): Promise<UserResponse | null> {
+  // Get all users including deleted ones (admin function)
+  static async getAllUsersIncludingDeleted(): Promise<UserResponse[]> {
     try {
-      const user = await prisma.user.findUnique({
-        where: { id },
+      const users = await prisma.user.findMany({
         select: {
           id: true,
           phone: true,
@@ -44,6 +47,39 @@ export class UserService {
           isVerified: true,
           qrCode: true,
           isActive: true,
+          deleted: true,
+          role: true,
+          lastLoginAt: true,
+          createdAt: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+      return users;
+    } catch (error) {
+      console.error('Error fetching all users including deleted:', error);
+      throw new Error('Failed to fetch users');
+    }
+  }
+
+  // Get user by ID
+  static async getUserById(id: number): Promise<UserResponse | null> {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { 
+          id,
+          deleted: false,
+        },
+        select: {
+          id: true,
+          phone: true,
+          email: true,
+          name: true,
+          isVerified: true,
+          qrCode: true,
+          isActive: true,
+          deleted: true,
           role: true,
           lastLoginAt: true,
           createdAt: true,
@@ -65,7 +101,10 @@ export class UserService {
       }
       
       const user = await prisma.user.findUnique({
-        where: { phone: cleanPhone },
+        where: { 
+          phone: cleanPhone,
+          deleted: false,
+        },
         select: {
           id: true,
           phone: true,
@@ -74,6 +113,7 @@ export class UserService {
           isVerified: true,
           qrCode: true,
           isActive: true,
+          deleted: true,
           role: true,
           lastLoginAt: true,
           createdAt: true,
@@ -108,6 +148,7 @@ export class UserService {
           isVerified: true,
           qrCode: true,
           isActive: true,
+          deleted: true,
           role: true,
           lastLoginAt: true,
           createdAt: true,
@@ -156,6 +197,7 @@ export class UserService {
           isVerified: true,
           qrCode: true,
           isActive: true,
+          deleted: true,
           role: true,
           lastLoginAt: true,
           createdAt: true,
@@ -183,7 +225,10 @@ export class UserService {
       }
       
       const user = await prisma.user.update({
-        where: { phone: cleanPhone },
+        where: { 
+          phone: cleanPhone,
+          deleted: false,
+        },
         data: { isVerified: true },
         select: {
           id: true,
@@ -193,6 +238,7 @@ export class UserService {
           isVerified: true,
           qrCode: true,
           isActive: true,
+          deleted: true,
           role: true,
           lastLoginAt: true,
           createdAt: true,
@@ -224,7 +270,10 @@ export class UserService {
       }
 
       const user = await prisma.user.update({
-        where: { id },
+        where: { 
+          id,
+          deleted: false,
+        },
         data: userData,
         select: {
           id: true,
@@ -234,6 +283,7 @@ export class UserService {
           isVerified: true,
           qrCode: true,
           isActive: true,
+          deleted: true,
           role: true,
           lastLoginAt: true,
           createdAt: true,
@@ -255,19 +305,23 @@ export class UserService {
     }
   }
 
-  // Delete user
+  // Soft delete user
   static async deleteUser(id: number): Promise<boolean> {
     try {
-      await prisma.user.delete({
-        where: { id },
+      const result = await prisma.user.update({
+        where: { 
+          id,
+          deleted: false, // Only allow deletion of non-deleted users
+        },
+        data: { deleted: true },
       });
-      return true;
+      return !!result; // Return true if update was successful
     } catch (error) {
       console.error('Error deleting user:', error);
       
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2025') {
-          return false; // User not found
+          return false; // User not found or already deleted
         }
       }
       throw new Error('Failed to delete user');
@@ -289,7 +343,10 @@ export class UserService {
 
         // Get current user to check if phone is actually changing
         const currentUser = await prisma.user.findUnique({
-          where: { id: userId },
+          where: { 
+            id: userId,
+            deleted: false,
+          },
           select: { phone: true }
         });
 
@@ -303,7 +360,10 @@ export class UserService {
 
           // Check if phone number is already taken by another user
           const existingUserWithPhone = await prisma.user.findUnique({
-            where: { phone: cleanPhone },
+            where: { 
+              phone: cleanPhone,
+              deleted: false,
+            },
             select: { id: true }
           });
 
@@ -322,7 +382,10 @@ export class UserService {
       }
 
       const user = await prisma.user.update({
-        where: { id: userId },
+        where: { 
+          id: userId,
+          deleted: false,
+        },
         data: updateData,
         select: {
           id: true,
@@ -332,6 +395,7 @@ export class UserService {
           isVerified: true,
           qrCode: true,
           isActive: true,
+          deleted: true,
           role: true,
           lastLoginAt: true,
           createdAt: true,
