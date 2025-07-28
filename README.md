@@ -237,6 +237,95 @@ Content-Type: application/json
 }
 ```
 
+### Voucher Management Endpoints
+
+#### 1. Get Voucher Packages
+
+```http
+GET /api/vouchers/packages
+```
+
+Response:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "medium",
+      "name": "Medium Pack",
+      "totalDrinks": 20,
+      "pricePerDrink": 23,
+      "totalPrice": 460,
+      "originalPrice": 600,
+      "savings": 140,
+      "recommended": true
+    }
+  ]
+}
+```
+
+#### 2. Create Voucher Order
+
+```http
+POST /api/vouchers/orders
+Authorization: Bearer your-access-token
+Content-Type: application/json
+
+{
+  "totalDrinks": 20,
+  "pricePerDrink": 25,
+  "expiryDays": 90
+}
+```
+
+#### 3. Complete Payment
+
+```http
+POST /api/vouchers/orders/complete
+Authorization: Bearer your-access-token
+Content-Type: application/json
+
+{
+  "orderId": 123,
+  "phonepeTransactionId": "PHONEPE_TXN_001",
+  "phonepeResponse": {}
+}
+```
+
+#### 4. Get User's Vouchers
+
+```http
+GET /api/vouchers
+Authorization: Bearer your-access-token
+```
+
+#### 5. Get Specific Voucher
+
+```http
+GET /api/vouchers/{id}
+Authorization: Bearer your-access-token
+```
+
+#### 6. Get Order Details
+
+```http
+GET /api/vouchers/orders/{id}
+Authorization: Bearer your-access-token
+```
+
+#### 7. Cancel Order
+
+```http
+POST /api/vouchers/orders/cancel
+Authorization: Bearer your-access-token
+Content-Type: application/json
+
+{
+  "orderId": 123,
+  "reason": "User cancelled"
+}
+```
+
 ### User Management Endpoints
 
 #### 1. Get All Users
@@ -370,6 +459,50 @@ sequenceDiagram
 - **Secure Sessions**: Each interaction tracked with unique session IDs
 - **Balance Tracking**: Real-time voucher balance updates
 - **Audit Trail**: Complete consumption history with machine details
+
+## 💳 Voucher Purchase Flow
+
+The SmartShake system implements a complete voucher purchase flow with payment integration.
+
+### Purchase Process
+
+1. **Browse Packages**: User views available voucher packages
+2. **Create Order**: User selects package and creates an order
+3. **Payment Processing**: User completes payment via PhonePe
+4. **Voucher Generation**: System creates voucher after successful payment
+5. **Consumption**: User scans QR codes at vending machines to consume drinks
+
+### Example Flow
+
+```bash
+# 1. Get available packages
+GET /api/vouchers/packages
+
+# 2. Create order for 20 drinks at ₹25 each
+POST /api/vouchers/orders
+{
+  "totalDrinks": 20,
+  "pricePerDrink": 25
+}
+
+# 3. Complete payment (after PhonePe payment)
+POST /api/vouchers/orders/complete
+{
+  "orderId": 123,
+  "phonepeTransactionId": "TXN_001"
+}
+
+# 4. View purchased vouchers
+GET /api/vouchers
+```
+
+### Voucher Lifecycle
+
+- **ACTIVE**: Ready for consumption
+- **EXHAUSTED**: All drinks consumed
+- **EXPIRED**: Past expiry date
+- **SUSPENDED**: Temporarily disabled
+- **CANCELLED**: Refunded/cancelled
 
 ### Security Features
 
@@ -807,4 +940,23 @@ sequenceDiagram
     VM->>API: Confirm dispensed
     API->>DB: Record consumption
     API->>U: Transaction complete
+```
+
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant API as Backend API
+    participant PayGW as PhonePe Gateway
+    participant DB as Database
+
+    U->>API: GET /api/vouchers/packages
+    API->>U: Return package options
+    U->>API: POST /api/vouchers/orders
+    API->>DB: Create order + transaction
+    API->>U: Return order with merchant ID
+    U->>PayGW: Process payment
+    PayGW->>API: Payment success webhook
+    API->>DB: Update order + create voucher
+    API->>U: Voucher created
 ```
