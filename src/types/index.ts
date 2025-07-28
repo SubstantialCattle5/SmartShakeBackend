@@ -55,5 +55,36 @@ export interface HealthCheckResponse {
   database?: string;
 }
 
+// Profile update types
+export interface UpdateProfileRequest {
+  name?: string;
+  phone?: string;
+}
+
+
+
+// Drink statistics types
+export interface DrinkStats {
+  totalSubscriptions: number;
+  activeSubscriptions: number;
+  totalDrinksConsumed: number;
+  totalDrinksRemaining: number;
+  recentConsumptions: Array<{
+    productName: string;
+    flavor: string;
+    consumedAt: Date;
+    quantity: number;
+  }>;
+  activeSubscriptionDetails: Array<{
+    id: number;
+    packageName: string;
+    totalDrinks: number;
+    consumedDrinks: number;
+    remainingDrinks: number;
+    expiryDate: Date;
+    status: string;
+  }>;
+}
+
 // Re-export Prisma types for convenience
 export { User, OtpCode, OtpPurpose, Prisma }; 

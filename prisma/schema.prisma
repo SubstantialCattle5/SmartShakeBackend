@@ -408,6 +408,7 @@ enum OtpPurpose {
   LOGIN
   REGISTRATION
   PASSWORD_RESET
+  PHONE_VERIFICATION
 }
 
 enum UserRole {

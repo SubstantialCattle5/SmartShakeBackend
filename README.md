@@ -226,6 +226,17 @@ POST /api/auth/logout-all
 Authorization: Bearer your-access-token
 ```
 
+#### 8. Resend Phone Verification OTP
+
+```http
+POST /api/auth/resend-phone-verification-otp
+Content-Type: application/json
+
+{
+  "phone": "+1234567890"
+}
+```
+
 ### User Management Endpoints
 
 #### 1. Get All Users
@@ -291,6 +302,32 @@ Authorization: Bearer your-access-token
 2. **Receive OTP**: User receives OTP code via SMS
 3. **Verify OTP**: `POST /api/auth/verify-otp` with phone, code, and purpose "LOGIN"
 4. **Authenticated**: User receives access and refresh tokens
+
+### Phone Number Change Flow
+
+1. **Update Profile**: `PUT /api/users/profile` with new phone number (requires authentication)
+2. **Account Unverified**: User becomes unverified and receives OTP for new phone
+3. **Verify New Phone**: `POST /api/auth/verify-otp` with new phone, code, and purpose "PHONE_VERIFICATION"
+4. **Re-Verified**: User can now login with new phone number
+
+### Troubleshooting: Stuck After Profile Update
+
+**Problem**: Updated phone number, now can't login.
+
+**Solution**: You need to verify your new phone number, not login again.
+
+1. **Use the OTP sent to your NEW phone number**
+2. **Call**: `POST /api/auth/verify-otp`
+   ```json
+   {
+     "phone": "YOUR_NEW_PHONE",
+     "code": "OTP_FROM_NEW_PHONE", 
+     "purpose": "PHONE_VERIFICATION"
+   }
+   ```
+3. **Then login normally** with your new phone number
+
+**If you lost the OTP**: `POST /api/auth/resend-phone-verification-otp` with your new phone number
 
 ### Security Features
 
