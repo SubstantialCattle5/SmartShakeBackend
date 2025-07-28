@@ -61,28 +61,35 @@ export interface UpdateProfileRequest {
   phone?: string;
 }
 
-
-
-// Drink statistics types
+// Voucher and consumption statistics types
 export interface DrinkStats {
-  totalSubscriptions: number;
-  activeSubscriptions: number;
+  totalSubscriptions: number; // Legacy: total vouchers for backward compatibility
+  activeSubscriptions: number; // Legacy: active vouchers for backward compatibility
   totalDrinksConsumed: number;
   totalDrinksRemaining: number;
   recentConsumptions: Array<{
-    productName: string;
-    flavor: string;
+    productName: string; // Maps to drinkType
+    flavor: string; // Maps to drinkSlot
     consumedAt: Date;
     quantity: number;
+    machineLocation?: string; // New field for machine location
+    machineId?: string; // New field for machine ID
   }>;
-  activeSubscriptionDetails: Array<{
+  activeSubscriptionDetails: Array<{ // Legacy: voucher details for backward compatibility
     id: number;
-    packageName: string;
+    packageName: string; // Maps to voucherNumber for backward compatibility
     totalDrinks: number;
     consumedDrinks: number;
     remainingDrinks: number;
-    expiryDate: Date;
+    expiryDate: Date | null;
     status: string;
+    // New voucher-specific fields
+    voucherNumber?: string;
+    pricePerDrink?: number;
+    totalPrice?: number;
+    isActivated?: boolean;
+    purchaseDate?: Date;
+    firstUsedAt?: Date | null;
   }>;
 }
 

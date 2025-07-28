@@ -329,6 +329,48 @@ Authorization: Bearer your-access-token
 
 **If you lost the OTP**: `POST /api/auth/resend-phone-verification-otp` with your new phone number
 
+## 🎫 Voucher System Flow
+
+The SmartShake backend implements a quantity-based voucher system where users purchase drink vouchers and consume them at vending machines by scanning QR codes.
+
+### User Journey
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant VM as Vending Machine
+    participant API as Backend API
+    participant DB as Database
+
+    U->>VM: Scans QR Code
+    VM->>U: Returns machineId + sessionId
+    U->>API: Authenticates (phone/OTP)
+    API->>DB: Fetch active vouchers
+    DB->>API: Return voucher list
+    API->>U: Show vouchers + drink options
+    U->>API: Select voucher + drink
+    API->>DB: Check voucher balance
+    API->>VM: Authorize dispensing
+    VM->>API: Confirm dispensed
+    API->>DB: Record consumption
+    API->>U: Transaction complete
+```
+
+### Voucher Lifecycle
+
+1. **Purchase Phase**: User buys voucher (e.g., 20 drinks for ₹500)
+2. **Activation Phase**: First use at any vending machine activates voucher
+3. **Consumption Phase**: User consumes drinks by scanning machine QR codes
+4. **Completion Phase**: Voucher becomes `EXHAUSTED` when all drinks consumed
+
+### Key Features
+
+- **Quantity-Based**: Simple drink count system (no product restrictions)
+- **Machine Agnostic**: Use any available vending machine
+- **Secure Sessions**: Each interaction tracked with unique session IDs
+- **Balance Tracking**: Real-time voucher balance updates
+- **Audit Trail**: Complete consumption history with machine details
+
 ### Security Features
 
 - **Rate Limiting**: Maximum 5 OTP requests per hour per phone number
@@ -494,7 +536,9 @@ SmartShakeBackend/
 
 ## 🔧 Database Schema
 
-### Users Table
+### Core Tables
+
+#### Users Table
 
 | Field      | Type      | Description                    |
 |------------|-----------|--------------------------------|
@@ -504,10 +548,13 @@ SmartShakeBackend/
 | name       | String    | User's full name               |
 | password   | String    | Optional hashed password       |
 | isVerified | Boolean   | Account verification status    |
+| isActive   | Boolean   | Account active status          |
+| deleted    | Boolean   | Soft delete flag               |
+| role       | Enum      | USER/ADMIN/TECH               |
 | createdAt  | DateTime  | Account creation timestamp     |
 | updatedAt  | DateTime  | Last update timestamp          |
 
-### OTP Codes Table
+#### OTP Codes Table
 
 | Field     | Type      | Description                |
 |-----------|-----------|----------------------------|
@@ -520,7 +567,7 @@ SmartShakeBackend/
 | userId    | Integer   | Foreign key to users       |
 | createdAt | DateTime  | Creation timestamp         |
 
-### Blacklisted Tokens Table
+#### Blacklisted Tokens Table
 
 | Field     | Type     | Description                    |
 |-----------|----------|--------------------------------|
@@ -530,6 +577,85 @@ SmartShakeBackend/
 | expiresAt | DateTime | Original token expiration      |
 | reason    | String   | Blacklisting reason            |
 | createdAt | DateTime | Blacklisting timestamp         |
+
+### Voucher System Tables
+
+#### DrinkVoucher Table
+
+| Field             | Type      | Description                    |
+|-------------------|-----------|--------------------------------|
+| id                | Integer   | Primary key                    |
+| userId            | Integer   | Foreign key to users           |
+| voucherNumber     | String    | Unique voucher identifier      |
+| totalDrinks       | Integer   | Total drinks in voucher        |
+| consumedDrinks    | Integer   | Number of drinks consumed      |
+| pricePerDrink     | Decimal   | Price per individual drink     |
+| totalPrice        | Decimal   | Total voucher cost             |
+| status            | Enum      | ACTIVE/EXPIRED/EXHAUSTED/etc   |
+| isActivated       | Boolean   | First use activation status    |
+| purchaseDate      | DateTime  | Voucher purchase timestamp     |
+| firstUsedAt       | DateTime  | First consumption timestamp    |
+| expiryDate        | DateTime  | Optional expiration date       |
+| version           | Integer   | Optimistic locking version     |
+
+#### Consumption Table
+
+| Field                  | Type      | Description                    |
+|------------------------|-----------|--------------------------------|
+| id                     | Integer   | Primary key                    |
+| userId                 | Integer   | Foreign key to users           |
+| voucherId              | Integer   | Foreign key to vouchers        |
+| machineId              | String    | Vending machine identifier     |
+| quantity               | Integer   | Number of drinks consumed      |
+| consumedAt             | DateTime  | Consumption timestamp          |
+| externalTransactionId  | String    | Machine transaction ID         |
+| vendingSessionId       | String    | Session tracking ID            |
+| status                 | Enum      | COMPLETED/FAILED/PENDING       |
+| preConsumptionBalance  | Integer   | Balance before consumption     |
+| postConsumptionBalance | Integer   | Balance after consumption      |
+
+#### VendingMachine Table
+
+| Field       | Type      | Description                    |
+|-------------|-----------|--------------------------------|
+| id          | Integer   | Primary key                    |
+| machineId   | String    | Unique machine identifier      |
+| name        | String    | Machine display name           |
+| location    | String    | Machine location description   |
+| city        | String    | Machine city                   |
+| qrCode      | String    | QR code users scan             |
+| isActive    | Boolean   | Machine operational status     |
+| isOnline    | Boolean   | Real-time connectivity status  |
+| lastPing    | DateTime  | Last heartbeat timestamp       |
+
+### Transaction & Payment Tables
+
+#### Order Table
+
+| Field        | Type      | Description                    |
+|--------------|-----------|--------------------------------|
+| id           | Integer   | Primary key                    |
+| userId       | Integer   | Foreign key to users           |
+| orderNumber  | String    | Unique order identifier        |
+| orderType    | Enum      | VOUCHER_PURCHASE/VOUCHER_TOPUP|
+| totalDrinks  | Integer   | Number of drinks purchased     |
+| totalAmount  | Decimal   | Total order amount             |
+| status       | Enum      | PENDING/CONFIRMED/COMPLETED    |
+| paymentStatus| Enum      | PENDING/PAID/FAILED           |
+
+#### Transaction Table
+
+| Field                 | Type      | Description                    |
+|-----------------------|-----------|--------------------------------|
+| id                    | Integer   | Primary key                    |
+| userId                | Integer   | Foreign key to users           |
+| orderId               | Integer   | Foreign key to orders          |
+| amount                | Decimal   | Transaction amount             |
+| status                | Enum      | PENDING/SUCCESS/FAILED        |
+| type                  | Enum      | PAYMENT/REFUND/ADJUSTMENT     |
+| phonepeTransactionId  | String    | PhonePe transaction ID         |
+| phonepeOrderId        | String    | PhonePe order ID               |
+| phonepeMerchantId     | String    | Merchant transaction ID        |
 
 ## 🚨 Error Handling
 
@@ -660,3 +786,25 @@ NODE_ENV=development npm run dev
 - Update documentation for API changes
 - Ensure Docker builds successfully
 - Test database migrations
+
+```mermaid
+
+sequenceDiagram
+    participant U as User
+    participant VM as Vending Machine
+    participant API as Backend API
+    participant DB as Database
+
+    U->>VM: Scans QR Code
+    VM->>U: Returns machineId + sessionId
+    U->>API: Authenticates (phone/OTP)
+    API->>DB: Fetch active vouchers
+    DB->>API: Return voucher list
+    API->>U: Show vouchers + drink options
+    U->>API: Select voucher + drink
+    API->>DB: Check voucher balance
+    API->>VM: Authorize dispensing
+    VM->>API: Confirm dispensed
+    API->>DB: Record consumption
+    API->>U: Transaction complete
+```

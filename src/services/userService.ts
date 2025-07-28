@@ -17,7 +17,6 @@ export class UserService {
           email: true,
           name: true,
           isVerified: true,
-          qrCode: true,
           isActive: true,
           deleted: true,
           role: true,
@@ -45,7 +44,6 @@ export class UserService {
           email: true,
           name: true,
           isVerified: true,
-          qrCode: true,
           isActive: true,
           deleted: true,
           role: true,
@@ -77,7 +75,6 @@ export class UserService {
           email: true,
           name: true,
           isVerified: true,
-          qrCode: true,
           isActive: true,
           deleted: true,
           role: true,
@@ -111,7 +108,6 @@ export class UserService {
           email: true,
           name: true,
           isVerified: true,
-          qrCode: true,
           isActive: true,
           deleted: true,
           role: true,
@@ -146,7 +142,6 @@ export class UserService {
           email: true,
           name: true,
           isVerified: true,
-          qrCode: true,
           isActive: true,
           deleted: true,
           role: true,
@@ -195,7 +190,6 @@ export class UserService {
           email: true,
           name: true,
           isVerified: true,
-          qrCode: true,
           isActive: true,
           deleted: true,
           role: true,
@@ -236,7 +230,6 @@ export class UserService {
           email: true,
           name: true,
           isVerified: true,
-          qrCode: true,
           isActive: true,
           deleted: true,
           role: true,
@@ -281,7 +274,6 @@ export class UserService {
           email: true,
           name: true,
           isVerified: true,
-          qrCode: true,
           isActive: true,
           deleted: true,
           role: true,
@@ -393,7 +385,6 @@ export class UserService {
           email: true,
           name: true,
           isVerified: true,
-          qrCode: true,
           isActive: true,
           deleted: true,
           role: true,
@@ -437,29 +428,14 @@ export class UserService {
     }
   }
 
-
-
-  // Get user's drink statistics
+  // Get user's voucher and consumption statistics
   static async getUserDrinkStats(userId: number): Promise<DrinkStats> {
     try {
-      // Get all user subscriptions with related data
-      const subscriptions = await prisma.userSubscription.findMany({
+      // Get all user vouchers with related data
+      const vouchers = await prisma.drinkVoucher.findMany({
         where: { userId },
         include: {
-          package: {
-            select: {
-              name: true,
-            },
-          },
-          drinkConsumptions: {
-            include: {
-              product: {
-                select: {
-                  name: true,
-                  flavor: true,
-                },
-              },
-            },
+          consumptions: {
             orderBy: {
               consumedAt: 'desc',
             },
@@ -471,62 +447,73 @@ export class UserService {
       });
 
       // Calculate stats
-      const totalSubscriptions = subscriptions.length;
-      const activeSubscriptions = subscriptions.filter(sub => sub.status === 'ACTIVE' && sub.expiryDate > new Date()).length;
+      const totalVouchers = vouchers.length;
+      const activeVouchers = vouchers.filter((voucher) => 
+        voucher.status === 'ACTIVE' && 
+        (voucher.expiryDate === null || voucher.expiryDate > new Date()) &&
+        voucher.consumedDrinks < voucher.totalDrinks
+      ).length;
       
       // Calculate total drinks consumed and remaining
       let totalDrinksConsumed = 0;
       let totalDrinksRemaining = 0;
       
-      subscriptions.forEach(sub => {
-        totalDrinksConsumed += sub.consumedDrinks;
-        if (sub.status === 'ACTIVE' && sub.expiryDate > new Date()) {
-          totalDrinksRemaining += (sub.totalDrinks - sub.consumedDrinks);
+      vouchers.forEach((voucher) => {
+        totalDrinksConsumed += voucher.consumedDrinks;
+        if (voucher.status === 'ACTIVE' && 
+            (voucher.expiryDate === null || voucher.expiryDate > new Date()) &&
+            voucher.consumedDrinks < voucher.totalDrinks) {
+          totalDrinksRemaining += (voucher.totalDrinks - voucher.consumedDrinks);
         }
       });
 
       // Get recent consumptions (last 10)
-      const recentConsumptions = await prisma.drinkConsumption.findMany({
+      const recentConsumptions = await prisma.consumption.findMany({
         where: { userId },
-        include: {
-          product: {
-            select: {
-              name: true,
-              flavor: true,
-            },
-          },
-        },
         orderBy: {
           consumedAt: 'desc',
         },
         take: 10,
       });
 
-      // Get active subscription details
-      const activeSubscriptionDetails = subscriptions
-        .filter(sub => sub.status === 'ACTIVE' && sub.expiryDate > new Date())
-        .map(sub => ({
-          id: sub.id,
-          packageName: sub.package.name,
-          totalDrinks: sub.totalDrinks,
-          consumedDrinks: sub.consumedDrinks,
-          remainingDrinks: sub.totalDrinks - sub.consumedDrinks,
-          expiryDate: sub.expiryDate,
-          status: sub.status,
+      // Get active voucher details
+      const activeVoucherDetails = vouchers
+        .filter((voucher) => 
+          voucher.status === 'ACTIVE' && 
+          (voucher.expiryDate === null || voucher.expiryDate > new Date()) &&
+          voucher.consumedDrinks < voucher.totalDrinks
+        )
+        .map((voucher) => ({
+          id: voucher.id,
+          packageName: voucher.voucherNumber, // Map voucherNumber to packageName for backward compatibility
+          totalDrinks: voucher.totalDrinks,
+          consumedDrinks: voucher.consumedDrinks,
+          remainingDrinks: voucher.totalDrinks - voucher.consumedDrinks,
+          expiryDate: voucher.expiryDate,
+          status: voucher.status,
+          // Additional voucher-specific fields
+          voucherNumber: voucher.voucherNumber,
+          pricePerDrink: Number(voucher.pricePerDrink),
+          totalPrice: Number(voucher.totalPrice),
+          isActivated: voucher.isActivated,
+          purchaseDate: voucher.purchaseDate,
+          firstUsedAt: voucher.firstUsedAt,
         }));
 
       return {
-        totalSubscriptions,
-        activeSubscriptions,
+        totalSubscriptions: totalVouchers, // Legacy field name for compatibility
+        activeSubscriptions: activeVouchers, // Legacy field name for compatibility
         totalDrinksConsumed,
         totalDrinksRemaining,
-        recentConsumptions: recentConsumptions.map(consumption => ({
-          productName: consumption.product.name,
-          flavor: consumption.product.flavor,
+        recentConsumptions: recentConsumptions.map((consumption) => ({
+          productName: consumption.drinkType || 'Unknown Drink',
+          flavor: consumption.drinkSlot || '',
           consumedAt: consumption.consumedAt,
           quantity: consumption.quantity,
+          machineLocation: consumption.location || '',
+          machineId: consumption.machineId,
         })),
-        activeSubscriptionDetails,
+        activeSubscriptionDetails: activeVoucherDetails, // Legacy field name for compatibility
       };
     } catch (error) {
       console.error('Error fetching user drink stats:', error);
