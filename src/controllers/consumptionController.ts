@@ -1,113 +1,67 @@
-import { Request, Response } from 'express';
+import { Request } from 'express';
 import { ConsumptionService, ConsumptionRequest } from '../services/consumptionService';
-import { TypedRequest, TypedResponse } from '../types';
+import { MachineService, MachineSessionService } from '../services/machineService';
+import { ValidationService } from '../validation/machineValidation';
+import { TypedRequest, TypedResponse, GenerateMachineQRRequest, GenerateMachineQRResponse, QRScanRequest } from '../types';
+import { SESSION_CONFIG, VALIDATION_LIMITS } from '../config/constants';
 import { prisma } from '../config/database';
 
 export class ConsumptionController {
 
-  // Health check for consumption service
-  static async healthCheck(req: Request, res: Response) {
-    try {
-      // Test database connectivity by counting consumptions
-      const count = await ConsumptionService.getConsumptionStats(1); // Test with user ID 1
-      
-      res.status(200).json({
-        success: true,
-        data: {
-          service: 'consumption-service',
-          status: 'healthy',
-          timestamp: new Date().toISOString(),
-        },
-        message: 'Consumption service is healthy',
-      });
-    } catch (error) {
-      console.error('Consumption service health check failed:', error);
-      res.status(503).json({
-        success: false,
-        error: 'Consumption service is unhealthy',
-      });
-    }
-  }
-
   // Step 1: Generate QR code for machine with embedded session and drink data
-  static async generateMachineQR(req: TypedRequest<{
-    machineId: string;
-    drinkType: string;
-    drinkSlot: string;
-    price: number;
-  }>, res: TypedResponse) {
+  static async generateMachineQR(
+    req: TypedRequest<GenerateMachineQRRequest>, 
+    res: TypedResponse<GenerateMachineQRResponse>
+  ) {
     try {
-      const { machineId, drinkType, drinkSlot, price } = req.body;
-      if (!machineId) {
+      const requestData = req.body;
+
+      // Validate input
+      const validation = ValidationService.validateMachineQRRequest(requestData);
+      if (!validation.isValid) {
         return res.status(400).json({
           success: false,
-          error: 'Machine ID is required',
-        });
-      }
-      if (!drinkType) {
-        return res.status(400).json({
-          success: false,
-          error: 'Drink type is required',
-        });
-      }
-      if (!drinkSlot) {
-        return res.status(400).json({
-          success: false,
-          error: 'Drink slot is required',
-        });
-      }
-      if (!price) {
-        return res.status(400).json({
-          success: false,
-          error: 'Price is required',
-        });
-      }
-        
-      if (!machineId || !drinkType || !drinkSlot || !price) {
-        return res.status(400).json({
-          success: false,
-          error: 'Machine ID, drink type, drink slot, and price are required',
+          error: validation.errors.join(', '),
         });
       }
 
-      // Validate machine exists
-      const machine = await prisma.vendingMachine.findUnique({
-        where: { machineId },
+      const { machineId, drinkType, drinkSlot, price } = requestData;
+
+      // Validate machine
+      const machineValidation = await MachineService.validateMachineById(machineId);
+      if (!machineValidation.valid) {
+        const statusCode = machineValidation.error === 'Machine not found' ? 404 : 400;
+        return res.status(statusCode).json({
+          success: false,
+          error: machineValidation.error!,
+        });
+      }
+
+      // Generate session and QR code
+      const sessionId = MachineSessionService.generateSessionId();
+      const qrCodeData = MachineSessionService.createQRCodeData({
+        machineQrCode: machineValidation.machine!.qrCode,
+        sessionId,
+        drinkType,
+        drinkSlot,
+        price,
       });
 
-      if (!machine) {
-        return res.status(404).json({
-          success: false,
-          error: 'Machine not found',
-        });
-      }
-
-      if (!machine.isActive || !machine.isOnline) {
-        return res.status(400).json({
-          success: false,
-          error: 'Machine is not available',
-        });
-      }
-
-      // Generate session ID (machine-generated)
-      const sessionId = `MSS_${Date.now()}_${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-      
-      // Create QR code with embedded data
-      const qrCodeData = `${machine.qrCode}|SESSION:${sessionId}|DRINK:${drinkType}|SLOT:${drinkSlot}|PRICE:${price}`;
+      const responseData: GenerateMachineQRResponse = {
+        qrCode: qrCodeData,
+        sessionId,
+        machineId,
+        drinkDetails: {
+          type: drinkType,
+          slot: drinkSlot,
+          price,
+        },
+        expiresAt: new Date(Date.now() + SESSION_CONFIG.EXPIRATION_MS),
+      };
 
       res.status(200).json({
         success: true,
-        data: {
-          qrCode: qrCodeData,
-          sessionId,
-          machineId,
-          drinkDetails: {
-            type: drinkType,
-            slot: drinkSlot,
-            price,
-          },
-          expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
-        },
+        data: responseData,
         message: 'QR code generated successfully',
       });
     } catch (error) {
@@ -185,10 +139,10 @@ export class ConsumptionController {
   }
 
   // Steps 2-4: Scan QR and process payment (combined flow)
-  static async scanQRAndPay(req: TypedRequest<{
-    qrCode: string;
-    voucherId: number;
-  }>, res: TypedResponse) {
+  static async scanQRAndPay(
+    req: TypedRequest<QRScanRequest>, 
+    res: TypedResponse
+  ) {
     try {
       const userId = req.user?.id;
 
@@ -199,24 +153,22 @@ export class ConsumptionController {
         });
       }
 
-      const { qrCode, voucherId } = req.body;
-
-      if (!qrCode || !voucherId) {
+      // Validate input
+      const validation = ValidationService.validateQRScanRequest(req.body);
+      if (!validation.isValid) {
         return res.status(400).json({
           success: false,
-          error: 'QR code and voucher ID are required',
+          error: validation.errors.join(', '),
         });
       }
+
+      const { qrCode, voucherId } = req.body;
 
       // Parse QR code data
       const qrData = ConsumptionService.parseDrinkFromQRCode(qrCode);
       
       // Extract session ID from QR
-      let sessionId: string | undefined;
-      if (qrCode.includes('SESSION:')) {
-        const sessionMatch = qrCode.match(/SESSION:([^|]+)/);
-        sessionId = sessionMatch?.[1];
-      }
+      const sessionId = MachineSessionService.extractSessionId(qrCode);
 
       if (!sessionId) {
         return res.status(400).json({
@@ -293,12 +245,14 @@ export class ConsumptionController {
         });
       }
 
-      const limit = parseInt(req.query.limit as string) || 50;
+      const limit = parseInt(req.query.limit as string) || VALIDATION_LIMITS.DEFAULT_HISTORY_LIMIT;
 
-      if (limit < 1 || limit > 100) {
+      // Validate pagination
+      const validation = ValidationService.validatePaginationParams({ limit }, VALIDATION_LIMITS.MAX_HISTORY_LIMIT);
+      if (!validation.isValid) {
         return res.status(400).json({
           success: false,
-          error: 'Limit must be between 1 and 100',
+          error: validation.errors.join(', '),
         });
       }
 

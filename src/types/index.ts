@@ -93,5 +93,41 @@ export interface DrinkStats {
   }>;
 }
 
+// Machine QR types
+export interface GenerateMachineQRRequest {
+  machineId: string;
+  drinkType: string;
+  drinkSlot: string;
+  price: number;
+}
+
+export interface GenerateMachineQRResponse {
+  qrCode: string;
+  sessionId: string;
+  machineId: string;
+  drinkDetails: {
+    type: string;
+    slot: string;
+    price: number;
+  };
+  expiresAt: Date;
+}
+
+export interface QRScanRequest {
+  qrCode: string;
+  voucherId: number;
+}
+
+export interface PaymentStatusResponse {
+  paymentCompleted: boolean;
+  sessionId: string;
+  consumptionId?: number;
+  voucherNumber?: string;
+  drinkType?: string;
+  drinkSlot?: string;
+  consumedAt?: Date;
+  canDispense: boolean;
+}
+
 // Re-export Prisma types for convenience
 export { User, OtpCode, OtpPurpose, UserRole, Prisma }; 
