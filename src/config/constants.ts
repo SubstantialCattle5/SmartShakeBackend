@@ -14,4 +14,62 @@ export const VALIDATION_LIMITS = {
 export const DRINK_CONFIG = {
   MAX_PRICE: 1000, // Maximum price in currency units
   MIN_PRICE: 1,    // Minimum price in currency units
+} as const;
+
+// Authentication related constants
+export const AUTH_CONFIG = {
+  // OTP Configuration
+  OTP_EXPIRY_MINUTES: 5,
+  OTP_EXPIRY_MS: 5 * 60 * 1000,
+  OTP_LENGTH: 6,
+  
+  // Rate Limiting
+  MAX_OTP_ATTEMPTS_PER_HOUR: 5,
+  MAX_LOGIN_ATTEMPTS_PER_HOUR: 10,
+  RATE_LIMIT_WINDOW_MINUTES: 60,
+  RATE_LIMIT_WINDOW_MS: 60 * 60 * 1000,
+  
+  // User Verification
+  RECENT_REGISTRATION_THRESHOLD_HOURS: 1,
+  RECENT_REGISTRATION_THRESHOLD_MS: 1 * 60 * 60 * 1000,
+  
+  // JWT Configuration
+  JWT_EXPIRY_DAYS: 7,
+  JWT_EXPIRY_SECONDS: 7 * 24 * 60 * 60,
+  REFRESH_TOKEN_EXPIRY_DAYS: 30,
+  REFRESH_TOKEN_EXPIRY_SECONDS: 30 * 24 * 60 * 60,
+  
+  // Security
+  BCRYPT_SALT_ROUNDS: 12,
+  MIN_PHONE_LENGTH: 10,
+  MAX_PHONE_LENGTH: 15,
+} as const;
+
+// Error codes for consistent client-side handling
+export const ERROR_CODES = {
+  // Authentication
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
+  TOKEN_EXPIRED: 'TOKEN_EXPIRED',
+  TOKEN_INVALID: 'TOKEN_INVALID',
+  TOKEN_BLACKLISTED: 'TOKEN_BLACKLISTED',
+  
+  // OTP
+  OTP_EXPIRED: 'OTP_EXPIRED',
+  OTP_INVALID: 'OTP_INVALID',
+  OTP_RATE_LIMITED: 'OTP_RATE_LIMITED',
+  
+  // User
+  USER_NOT_FOUND: 'USER_NOT_FOUND',
+  USER_ALREADY_EXISTS: 'USER_ALREADY_EXISTS',
+  USER_NOT_VERIFIED: 'USER_NOT_VERIFIED',
+  
+  // Validation
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  PHONE_INVALID: 'PHONE_INVALID',
+  NAME_REQUIRED: 'NAME_REQUIRED',
+  
+  // Generic
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+  UNAUTHORIZED: 'UNAUTHORIZED',
+  FORBIDDEN: 'FORBIDDEN',
 } as const; 

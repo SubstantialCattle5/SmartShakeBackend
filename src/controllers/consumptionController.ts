@@ -85,6 +85,22 @@ export class ConsumptionController {
         });
       }
 
+      // Validate session ID format
+      if (!MachineSessionService.isValidSessionId(sessionId)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid session ID format',
+        });
+      }
+
+      // Check if session has expired
+      if (MachineSessionService.isSessionExpired(sessionId)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Session has expired',
+        });
+      }
+
       // Check if there's a completed consumption for this session
       const consumption = await prisma.consumption.findFirst({
         where: {
@@ -138,6 +154,89 @@ export class ConsumptionController {
     }
   }
 
+  // Helper method to validate session
+  private static async validateSession(sessionId: string) {
+    // Check session ID format
+    if (!MachineSessionService.isValidSessionId(sessionId)) {
+      return {
+        valid: false,
+        error: 'Invalid session ID format',
+      };
+    }
+
+    // Check if session has expired
+    if (MachineSessionService.isSessionExpired(sessionId)) {
+      return {
+        valid: false,
+        error: 'Session has expired',
+      };
+    }
+
+    // Check if payment already exists for this session
+    const existingConsumption = await prisma.consumption.findFirst({
+      where: {
+        vendingSessionId: sessionId,
+        status: 'COMPLETED',
+      },
+    });
+
+    if (existingConsumption) {
+      return {
+        valid: false,
+        error: 'Payment already completed for this QR code',
+      };
+    }
+
+    return { valid: true };
+  }
+
+  // Helper method to validate QR code and extract session
+  private static validateAndParseQRCode(qrCode: string) {
+    try {
+      // Parse QR code data
+      const qrData = ConsumptionService.parseDrinkFromQRCode(qrCode);
+      
+      // Extract session ID from QR
+      const sessionId = MachineSessionService.extractSessionId(qrCode);
+
+      if (!sessionId) {
+        return {
+          valid: false,
+          error: 'Invalid QR code - no session ID found',
+        };
+      }
+
+      return {
+        valid: true,
+        qrData,
+        sessionId,
+      };
+    } catch (error) {
+      console.error('Error parsing QR code:', error);
+      return {
+        valid: false,
+        error: 'Invalid QR code format',
+      };
+    }
+  }
+
+  // Helper method to prepare consumption request
+  private static prepareConsumptionRequest(
+    voucherId: number,
+    machineId: string,
+    sessionId: string,
+    qrData: { drinkType?: string; drinkSlot?: string }
+  ): ConsumptionRequest {
+    return {
+      voucherId,
+      machineId,
+      quantity: 1,
+      drinkType: qrData.drinkType,
+      drinkSlot: qrData.drinkSlot,
+      sessionId,
+    };
+  }
+
   // Steps 2-4: Scan QR and process payment (combined flow)
   static async scanQRAndPay(
     req: TypedRequest<QRScanRequest>, 
@@ -153,7 +252,7 @@ export class ConsumptionController {
         });
       }
 
-      // Validate input
+      // Validate request input
       const validation = ValidationService.validateQRScanRequest(req.body);
       if (!validation.isValid) {
         return res.status(400).json({
@@ -164,21 +263,28 @@ export class ConsumptionController {
 
       const { qrCode, voucherId } = req.body;
 
-      // Parse QR code data
-      const qrData = ConsumptionService.parseDrinkFromQRCode(qrCode);
-      
-      // Extract session ID from QR
-      const sessionId = MachineSessionService.extractSessionId(qrCode);
-
-      if (!sessionId) {
+      // Parse and validate QR code
+      const qrValidation = ConsumptionController.validateAndParseQRCode(qrCode);
+      if (!qrValidation.valid) {
         return res.status(400).json({
           success: false,
-          error: 'Invalid QR code - no session ID found',
+          error: qrValidation.error,
+        });
+      }
+
+      const { qrData, sessionId } = qrValidation;
+
+      // Validate session (format, expiration, duplicate payment check)
+      const sessionValidation = await ConsumptionController.validateSession(sessionId!);
+      if (!sessionValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          error: sessionValidation.error,
         });
       }
 
       // Validate machine
-      const machineValidation = await ConsumptionService.validateMachineQR(qrData.machineQrCode);
+      const machineValidation = await ConsumptionService.validateMachineQR(qrData!.machineQrCode);
       if (!machineValidation.valid) {
         return res.status(400).json({
           success: false,
@@ -195,15 +301,13 @@ export class ConsumptionController {
         });
       }
 
-      // Process consumption (decreases drink count by 1)
-      const consumptionRequest: ConsumptionRequest = {
+      // Prepare and process consumption
+      const consumptionRequest = ConsumptionController.prepareConsumptionRequest(
         voucherId,
-        machineId: machineValidation.machine!.id,
-        quantity: 1,
-        drinkType: qrData.drinkType,
-        drinkSlot: qrData.drinkSlot,
-        sessionId,
-      };
+        machineValidation.machine!.id,
+        sessionId!,
+        qrData!
+      );
 
       const result = await ConsumptionService.processConsumption(userId, consumptionRequest);
 
@@ -219,7 +323,7 @@ export class ConsumptionController {
         data: {
           consumption: result.consumption,
           voucher: result.voucher,
-          sessionId,
+          sessionId: sessionId!,
           message: 'Payment successful! Machine will dispense your drink shortly.',
         },
         message: 'QR payment processed successfully',

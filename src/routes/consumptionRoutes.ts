@@ -13,7 +13,6 @@ router.post('/qr/scan-and-pay', AuthMiddleware.authenticate, ConsumptionControll
 // Step 5: Machine checks if payment has been completed
 router.get('/machine/check-payment/:sessionId', ConsumptionController.checkPaymentStatus);
 
-
 // User history endpoint (optional)
 router.get('/history', AuthMiddleware.authenticate, ConsumptionController.getConsumptionHistory);
 

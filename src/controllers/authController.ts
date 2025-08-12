@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { OtpService } from '../services/otpService';
 import { UserService } from '../services/userService';
 import { JwtService } from '../services/jwtService';
+import { AuthValidation } from '../validation/authValidation';
+import { AUTH_CONFIG } from '../config/constants';
 import { SendOtpRequest, VerifyOtpRequest, TypedRequest, ApiResponse, LoginResponse, OtpResponse, OtpPurpose } from '../types';
 
 export class AuthController {
@@ -10,32 +12,24 @@ export class AuthController {
     try {
       const { phone, purpose = OtpPurpose.LOGIN } = req.body;
       
-      if (!phone) {
+      // Validate request
+      const validation = AuthValidation.validateSendOtpRequest({ phone, purpose });
+      if (!validation.isValid) {
         const response: ApiResponse = {
           success: false,
-          error: 'Phone number is required',
-        };
-        res.status(400).json(response);
-        return;
-      }
-
-      // Validate phone number format early
-      const { isValid, error: phoneError } = OtpService.cleanAndValidatePhone(phone);
-      if (!isValid) {
-        const response: ApiResponse = {
-          success: false,
-          error: phoneError || 'Invalid phone number format',
+          error: validation.errors[0],
         };
         res.status(400).json(response);
         return;
       }
 
       // Rate limiting check
-      const attempts = await OtpService.getOtpAttempts(phone, 60); // Last hour
-      if (attempts >= 5) {
+      const attempts = await OtpService.getOtpAttempts(phone!, AUTH_CONFIG.RATE_LIMIT_WINDOW_MINUTES);
+      const rateLimitValidation = AuthValidation.validateRateLimit(attempts);
+      if (!rateLimitValidation.isValid) {
         const response: ApiResponse = {
           success: false,
-          error: 'Too many OTP requests. Please try again later.',
+          error: rateLimitValidation.errors[0],
         };
         res.status(429).json(response);
         return;
@@ -43,11 +37,12 @@ export class AuthController {
 
       // For registration, check if user doesn't exist
       if (purpose === OtpPurpose.REGISTRATION) {
-        const existingUser = await UserService.getUserByPhone(phone);
-        if (existingUser) {
+        const existingUser = await UserService.getUserByPhone(phone!);
+        const userNotExistsValidation = AuthValidation.validateUserNotExists(!!existingUser);
+        if (!userNotExistsValidation.isValid) {
           const response: ApiResponse = {
             success: false,
-            error: 'User with this phone number already exists',
+            error: userNotExistsValidation.errors[0],
           };
           res.status(400).json(response);
           return;
@@ -56,11 +51,12 @@ export class AuthController {
 
       // For login, check if user exists
       if (purpose === OtpPurpose.LOGIN) {
-        const existingUser = await UserService.getUserByPhone(phone);
-        if (!existingUser) {
+        const existingUser = await UserService.getUserByPhone(phone!);
+        const userExistsValidation = AuthValidation.validateUserExists(!!existingUser);
+        if (!userExistsValidation.isValid) {
           const response: ApiResponse = {
             success: false,
-            error: 'User not found. Please register first.',
+            error: userExistsValidation.errors[0],
           };
           res.status(404).json(response);
           return;
@@ -68,7 +64,7 @@ export class AuthController {
       }
 
       try {
-        const { code, expiresAt } = await OtpService.sendOtp(phone, purpose);
+        const { code, expiresAt } = await OtpService.sendOtp(phone!, purpose);
         
         const response: ApiResponse<OtpResponse> = {
           success: true,
@@ -107,17 +103,19 @@ export class AuthController {
     try {
       const { phone, code, purpose = OtpPurpose.LOGIN } = req.body;
       
-      if (!phone || !code) {
+      // Validate request
+      const validation = AuthValidation.validateVerifyOtpRequest({ phone, code, purpose });
+      if (!validation.isValid) {
         const response: ApiResponse = {
           success: false,
-          error: 'Phone number and OTP code are required',
+          error: validation.errors[0],
         };
         res.status(400).json(response);
         return;
       }
 
       // Verify OTP
-      const isValid = await OtpService.verifyOtp(phone, code, purpose);
+      const isValid = await OtpService.verifyOtp(phone!, code!, purpose);
       
       if (!isValid) {
         const response: ApiResponse = {
@@ -132,7 +130,7 @@ export class AuthController {
 
       if (purpose === OtpPurpose.REGISTRATION) {
         // Get the unverified user and mark as verified
-        user = await UserService.getUserByPhone(phone);
+        user = await UserService.getUserByPhone(phone!);
         if (!user) {
           const response: ApiResponse = {
             success: false,
@@ -143,7 +141,7 @@ export class AuthController {
         }
         
         // Mark user as verified
-        const verifiedUser = await UserService.markUserAsVerified(phone);
+        const verifiedUser = await UserService.markUserAsVerified(phone!);
         if (!verifiedUser) {
           const response: ApiResponse = {
             success: false,
@@ -155,31 +153,26 @@ export class AuthController {
         user = verifiedUser;
       } else if (purpose === OtpPurpose.PHONE_VERIFICATION) {
         // Handle phone verification for profile updates
-        const { cleanPhone } = OtpService.cleanAndValidatePhone(phone);
+        const { cleanPhone } = AuthValidation.validatePhoneNumber(phone!);
         
         // Check if user exists with this phone number
-        const existingUser = await UserService.getUserByPhone(cleanPhone);
-        if (!existingUser) {
-          const response: ApiResponse = {
-            success: false,
-            error: 'User not found with this phone number. Please ensure you are using the correct phone number.',
-          };
-          res.status(404).json(response);
-          return;
-        }
+        const existingUser = await UserService.getUserByPhone(cleanPhone!);
+        const phoneVerificationValidation = AuthValidation.validatePhoneVerification(
+          !!existingUser, 
+          existingUser?.isVerified || false
+        );
         
-        // Check if user is already verified
-        if (existingUser.isVerified) {
+        if (!phoneVerificationValidation.isValid) {
           const response: ApiResponse = {
             success: false,
-            error: 'Phone number is already verified. You can login normally.',
+            error: phoneVerificationValidation.errors[0],
           };
-          res.status(400).json(response);
+          res.status(existingUser ? 400 : 404).json(response);
           return;
         }
         
         // Find user by phone number and mark as verified
-        const verifiedUser = await UserService.markUserAsVerified(cleanPhone);
+        const verifiedUser = await UserService.markUserAsVerified(cleanPhone!);
         if (!verifiedUser) {
           const response: ApiResponse = {
             success: false,
@@ -200,7 +193,7 @@ export class AuthController {
         return;
       } else {
         // Get existing user for login
-        user = await UserService.getUserByPhone(phone);
+        user = await UserService.getUserByPhone(phone!);
         if (!user) {
           const response: ApiResponse = {
             success: false,
@@ -211,21 +204,16 @@ export class AuthController {
         }
 
         // Check if user is verified
-        if (!user.isVerified) {
-          // Check if this user has been created recently (within last hour) - likely a new registration
-          const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-          const isRecentRegistration = user.createdAt > oneHourAgo;
-          
-          let errorMessage = 'Account not verified.';
-          if (isRecentRegistration) {
-            errorMessage += ' Please complete registration first.';
-          } else {
-            errorMessage += ' If you recently changed your phone number, please verify it using the OTP sent to your new number with purpose "PHONE_VERIFICATION".';
-          }
-          
+        const verificationValidation = AuthValidation.validateUserVerification(
+          user.isVerified, 
+          user.createdAt, 
+          'login'
+        );
+        
+        if (!verificationValidation.isValid) {
           const response: ApiResponse = {
             success: false,
-            error: errorMessage,
+            error: verificationValidation.errors[0],
           };
           res.status(400).json(response);
           return;
@@ -266,52 +254,35 @@ export class AuthController {
     try {
       const { phone, name } = req.body;
       
-      if (!phone) {
+      // Validate request
+      const validation = AuthValidation.validateRegistrationRequest({ phone, name });
+      if (!validation.isValid) {
         const response: ApiResponse = {
           success: false,
-          error: 'Phone number is required',
-        };
-        res.status(400).json(response);
-        return;
-      }
-
-      if (!name?.trim()) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'Name is required for registration',
-        };
-        res.status(400).json(response);
-        return;
-      }
-
-      // Validate phone number format before doing anything else
-      const { isValid, error: phoneError } = OtpService.cleanAndValidatePhone(phone);
-      if (!isValid) {
-        const response: ApiResponse = {
-          success: false,
-          error: phoneError || 'Invalid phone number format',
+          error: validation.errors[0],
         };
         res.status(400).json(response);
         return;
       }
 
       // Check if user already exists
-      const existingUser = await UserService.getUserByPhone(phone);
-      if (existingUser) {
+      const existingUser = await UserService.getUserByPhone(phone!);
+      const userNotExistsValidation = AuthValidation.validateUserNotExists(!!existingUser);
+      if (!userNotExistsValidation.isValid) {
         const response: ApiResponse = {
           success: false,
-          error: 'User with this phone number already exists',
+          error: userNotExistsValidation.errors[0],
         };
         res.status(400).json(response);
         return;
       }
 
       // Create user with isVerified: false
-      await UserService.createUserWithPhone(phone, name, false);
+      await UserService.createUserWithPhone(phone!, name!, false);
 
       // Send OTP for registration
       try {
-        const { expiresAt } = await OtpService.sendOtp(phone, OtpPurpose.REGISTRATION);
+        const { expiresAt } = await OtpService.sendOtp(phone!, OtpPurpose.REGISTRATION);
         
         const response: ApiResponse<OtpResponse> = {
           success: true,
@@ -351,41 +322,40 @@ export class AuthController {
     try {
       const { phone } = req.body;
       
-      if (!phone) {
+      // Validate request
+      const validation = AuthValidation.validateLoginRequest({ phone });
+      if (!validation.isValid) {
         const response: ApiResponse = {
           success: false,
-          error: 'Phone number is required',
-        };
-        res.status(400).json(response);
-        return;
-      }
-
-      // Validate phone number format early
-      const { isValid, error: phoneError } = OtpService.cleanAndValidatePhone(phone);
-      if (!isValid) {
-        const response: ApiResponse = {
-          success: false,
-          error: phoneError || 'Invalid phone number format',
+          error: validation.errors[0],
         };
         res.status(400).json(response);
         return;
       }
 
       // Check if user exists
-      const existingUser = await UserService.getUserByPhone(phone);
-      if (!existingUser) {
+      const existingUser = await UserService.getUserByPhone(phone!);
+      const userExistsValidation = AuthValidation.validateUserExists(!!existingUser);
+      if (!userExistsValidation.isValid) {
         const response: ApiResponse = {
           success: false,
-          error: 'User not found. Please register first.',
+          error: userExistsValidation.errors[0],
         };
         res.status(404).json(response);
         return;
       }
 
-      if (!existingUser.isVerified) {
+      // Check if user is verified
+      const verificationValidation = AuthValidation.validateUserVerification(
+        existingUser!.isVerified, 
+        existingUser!.createdAt, 
+        'login'
+      );
+      
+      if (!verificationValidation.isValid) {
         const response: ApiResponse = {
           success: false,
-          error: 'Account not verified. Please complete registration first.',
+          error: verificationValidation.errors[0],
         };
         res.status(400).json(response);
         return;
@@ -393,7 +363,7 @@ export class AuthController {
 
       // Send OTP for login
       try {
-        const { expiresAt } = await OtpService.sendOtp(phone, OtpPurpose.LOGIN);
+        const { expiresAt } = await OtpService.sendOtp(phone!, OtpPurpose.LOGIN);
         
         const response: ApiResponse<OtpResponse> = {
           success: true,
@@ -432,10 +402,12 @@ export class AuthController {
     try {
       const { refreshToken } = req.body;
 
-      if (!refreshToken) {
+      // Validate request
+      const validation = AuthValidation.validateRefreshTokenRequest({ refreshToken });
+      if (!validation.isValid) {
         const response: ApiResponse = {
           success: false,
-          error: 'Refresh token is required',
+          error: validation.errors[0],
         };
         res.status(400).json(response);
         return;
@@ -443,7 +415,7 @@ export class AuthController {
 
       // Verify refresh token
       try {
-        const decoded = JwtService.verifyToken(refreshToken);
+        const decoded = JwtService.verifyToken(refreshToken!);
         
         // Get user from database
         const user = await UserService.getUserById(decoded.userId);
@@ -619,39 +591,31 @@ export class AuthController {
     try {
       const { phone } = req.body;
 
-      if (!phone) {
+      // Validate request
+      const validation = AuthValidation.validateLoginRequest({ phone });
+      if (!validation.isValid) {
         const response: ApiResponse = {
           success: false,
-          error: 'Phone number is required',
-        };
-        res.status(400).json(response);
-        return;
-      }
-
-      // Validate phone number format
-      const { isValid, error: phoneError } = OtpService.cleanAndValidatePhone(phone);
-      if (!isValid) {
-        const response: ApiResponse = {
-          success: false,
-          error: phoneError || 'Invalid phone number format',
+          error: validation.errors[0],
         };
         res.status(400).json(response);
         return;
       }
 
       // Check if user exists
-      const user = await UserService.getUserByPhone(phone);
-      if (!user) {
+      const user = await UserService.getUserByPhone(phone!);
+      const userExistsValidation = AuthValidation.validateUserExists(!!user);
+      if (!userExistsValidation.isValid) {
         const response: ApiResponse = {
           success: false,
-          error: 'User not found. Please register first.',
+          error: userExistsValidation.errors[0],
         };
         res.status(404).json(response);
         return;
       }
 
       // Check if user is already verified
-      if (user.isVerified) {
+      if (user!.isVerified) {
         const response: ApiResponse = {
           success: false,
           error: 'Phone number is already verified.',
@@ -662,7 +626,7 @@ export class AuthController {
 
       // Send OTP for phone verification
       try {
-        const { expiresAt } = await OtpService.sendOtp(phone, OtpPurpose.PHONE_VERIFICATION);
+        const { expiresAt } = await OtpService.sendOtp(phone!, OtpPurpose.PHONE_VERIFICATION);
         
         const response: ApiResponse<OtpResponse> = {
           success: true,

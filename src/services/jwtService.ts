@@ -1,9 +1,9 @@
 import jwt from 'jsonwebtoken';
 import { UserResponse } from '../types';
-import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import { prisma } from '../config/database';
 import { UserRole } from '@prisma/client';
+import { AUTH_CONFIG, ERROR_CODES } from '../config/constants';
 
 // JWT Payload interface
 export interface JwtPayload {
@@ -16,8 +16,21 @@ export interface JwtPayload {
 }
 
 export class JwtService {
-  private static readonly JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key_change_this_in_production';
-  private static readonly JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+  private static readonly JWT_SECRET = this.getJwtSecret();
+  private static readonly JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || `${AUTH_CONFIG.JWT_EXPIRY_DAYS}d`;
+
+  // Get JWT secret with proper validation
+  private static getJwtSecret(): string {
+    const secret = process.env.JWT_SECRET;
+    
+    // In production, require a proper JWT secret
+    if (process.env.NODE_ENV === 'production' && (!secret || secret.length < 32)) {
+      throw new Error('JWT_SECRET must be set and at least 32 characters long in production');
+    }
+    
+    // Fallback for development only
+    return secret || 'your_super_secret_jwt_key_change_this_in_production';
+  }
 
   // Generate JWT token for a user
   static generateToken(user: UserResponse): string {
@@ -25,8 +38,8 @@ export class JwtService {
       userId: user.id,
       phone: user.phone,
       isVerified: user.isVerified,
-      role: user.role, // Assuming UserResponse includes a 'role' field
-      exp: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60), // 7 days
+      role: user.role,
+      exp: Math.floor(Date.now() / 1000) + AUTH_CONFIG.JWT_EXPIRY_SECONDS,
     };
 
     try {
@@ -105,8 +118,8 @@ export class JwtService {
       userId: user.id,
       phone: user.phone,
       isVerified: user.isVerified,
-      role: user.role, // Assuming UserResponse includes a 'role' field
-      exp: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60), // 30 days
+      role: user.role,
+      exp: Math.floor(Date.now() / 1000) + AUTH_CONFIG.REFRESH_TOKEN_EXPIRY_SECONDS,
     };
 
     try {

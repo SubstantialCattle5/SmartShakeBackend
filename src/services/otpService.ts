@@ -1,16 +1,25 @@
 import { prisma } from '../config/database';
 import { Prisma, OtpPurpose } from '@prisma/client';
+import { AUTH_CONFIG } from '../config/constants';
 
 export class OtpService {
-  // Generate a 6-digit OTP (hardcoded for development)
+  // Generate a 6-digit OTP
   static generateOtpCode(): string {
-    return '000000';
+    // Use hardcoded OTP only in development/test environments
+    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
+      return process.env.DEV_OTP_CODE || '000000';
+    }
+    
+    // Generate random OTP for production
+    const min = Math.pow(10, AUTH_CONFIG.OTP_LENGTH - 1);
+    const max = Math.pow(10, AUTH_CONFIG.OTP_LENGTH) - 1;
+    return Math.floor(Math.random() * (max - min + 1) + min).toString();
   }
 
-  // Calculate expiration time (5 minutes from now)
+  // Calculate expiration time
   private static getExpirationTime(): Date {
     const now = new Date();
-    return new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes
+    return new Date(now.getTime() + AUTH_CONFIG.OTP_EXPIRY_MS);
   }
 
   // Clean and validate phone number
@@ -156,14 +165,14 @@ export class OtpService {
   }
 
   // Get OTP attempts for rate limiting
-  static async getOtpAttempts(phone: string, timeWindow = 60): Promise<number> {
+  static async getOtpAttempts(phone: string, timeWindowMinutes = AUTH_CONFIG.RATE_LIMIT_WINDOW_MINUTES): Promise<number> {
     try {
       const { cleanPhone, isValid } = this.cleanAndValidatePhone(phone);
       if (!isValid) {
         return 0;
       }
       
-      const timeLimit = new Date(Date.now() - timeWindow * 60 * 1000); // Last hour
+      const timeLimit = new Date(Date.now() - timeWindowMinutes * 60 * 1000);
 
       const count = await prisma.otpCode.count({
         where: {
