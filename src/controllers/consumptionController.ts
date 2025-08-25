@@ -5,6 +5,7 @@ import { ValidationService } from '../validation/machineValidation';
 import { TypedRequest, TypedResponse, GenerateMachineQRRequest, GenerateMachineQRResponse, QRScanRequest } from '../types';
 import { SESSION_CONFIG, VALIDATION_LIMITS } from '../config/constants';
 import { prisma } from '../config/database';
+import { DrinkFlavour, DrinkType } from '@prisma/client';
 
 export class ConsumptionController {
 
@@ -25,7 +26,7 @@ export class ConsumptionController {
         });
       }
 
-      const { machineId, drinkType, drinkSlot, price } = requestData;
+      const { machineId, drinkType, drinkFlavour, price } = requestData;
 
       // Validate machine
       const machineValidation = await MachineService.validateMachineById(machineId);
@@ -43,7 +44,7 @@ export class ConsumptionController {
         machineQrCode: machineValidation.machine!.qrCode,
         sessionId,
         drinkType,
-        drinkSlot,
+        drinkFlavour,
         price,
       });
 
@@ -53,7 +54,7 @@ export class ConsumptionController {
         machineId,
         drinkDetails: {
           type: drinkType,
-          slot: drinkSlot,
+          flavour: drinkFlavour,
           price,
         },
         expiresAt: new Date(Date.now() + SESSION_CONFIG.EXPIRATION_MS),
@@ -127,8 +128,8 @@ export class ConsumptionController {
             sessionId,
             consumptionId: consumption.id,
             voucherNumber: consumption.voucher.voucherNumber,
-            drinkType: consumption.drinkType,
-            drinkSlot: consumption.drinkSlot,
+            drinkType: consumption.drinkType as DrinkType,
+            drinkFlavour: consumption.drinkFlavour as DrinkFlavour,
             consumedAt: consumption.consumedAt,
             canDispense: true,
           },
@@ -222,17 +223,17 @@ export class ConsumptionController {
 
   // Helper method to prepare consumption request
   private static prepareConsumptionRequest(
-    voucherId: number,
+    voucherId: string,
     machineId: string,
     sessionId: string,
-    qrData: { drinkType?: string; drinkSlot?: string }
+    qrData: { drinkType?: string; drinkFlavour?: string }
   ): ConsumptionRequest {
     return {
       voucherId,
       machineId,
       quantity: 1,
       drinkType: qrData.drinkType,
-      drinkSlot: qrData.drinkSlot,
+      drinkFlavour: qrData.drinkFlavour,
       sessionId,
     };
   }
@@ -262,6 +263,7 @@ export class ConsumptionController {
       }
 
       const { qrCode, voucherId } = req.body;
+      const voucherIdString = typeof voucherId === 'number' ? (voucherId as number).toString() : voucherId as string;
 
       // Parse and validate QR code
       const qrValidation = ConsumptionController.validateAndParseQRCode(qrCode);
@@ -293,7 +295,7 @@ export class ConsumptionController {
       }
 
       // Validate voucher
-      const voucherValidation = await ConsumptionService.validateVoucherForConsumption(voucherId, userId, 1);
+      const voucherValidation = await ConsumptionService.validateVoucherForConsumption(voucherIdString, userId, 1);
       if (!voucherValidation.valid) {
         return res.status(400).json({
           success: false,
@@ -303,7 +305,7 @@ export class ConsumptionController {
 
       // Prepare and process consumption
       const consumptionRequest = ConsumptionController.prepareConsumptionRequest(
-        voucherId,
+        voucherIdString,
         machineValidation.machine!.id,
         sessionId!,
         qrData!

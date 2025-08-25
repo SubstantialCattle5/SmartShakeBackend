@@ -2,18 +2,18 @@ import { prisma } from '../config/database';
 import { VoucherStatus, ConsumptionStatus, Prisma } from '@prisma/client';
 
 export interface ConsumptionRequest {
-  voucherId: number;
+  voucherId: string;
   machineId: string;
   quantity: number;
   drinkType?: string;
-  drinkSlot?: string;
+  drinkFlavour?: string;
   sessionId?: string;
 }
 
 export interface ConsumptionValidationResult {
   valid: boolean;
   voucher?: {
-    id: number;
+    id: string;
     voucherNumber: string;
     remainingDrinks: number;
     status: VoucherStatus;
@@ -33,20 +33,20 @@ export interface ConsumptionValidationResult {
 export interface ConsumptionResult {
   success: boolean;
   consumption?: {
-    id: number;
-    voucherId: number;
+    id: string;
+    voucherId: string;
     quantity: number;
     consumedAt: Date;
     machineId: string;
     location: string;
     drinkType: string | null;
-    drinkSlot: string | null;
+    drinkFlavour: string | null;
     sessionId: string | null;
     preConsumptionBalance: number;
     postConsumptionBalance: number;
   };
   voucher?: {
-    id: number;
+    id: string;
     voucherNumber: string;
     remainingDrinks: number;
     totalDrinks: number;
@@ -124,8 +124,8 @@ export class ConsumptionService {
 
   // Validate voucher for consumption
   static async validateVoucherForConsumption(
-    voucherId: number,
-    userId: number,
+    voucherId: string,
+    userId: string,
     quantity: number = 1
   ): Promise<ConsumptionValidationResult> {
     try {
@@ -199,11 +199,11 @@ export class ConsumptionService {
 
   // Process consumption (decreases drink count by 1)
   static async processConsumption(
-    userId: number,
+    userId: string,
     consumptionData: ConsumptionRequest
   ): Promise<ConsumptionResult> {
     try {
-      const { voucherId, machineId, quantity, drinkType, drinkSlot, sessionId } = consumptionData;
+      const { voucherId, machineId, quantity, drinkType, drinkFlavour, sessionId } = consumptionData;
 
       // Use database transaction for atomicity
       const result = await prisma.$transaction(async (tx) => {
@@ -288,8 +288,8 @@ export class ConsumptionService {
             machineId,
             machineQRCode: machine.qrCode,
             location: machine.location,
-            drinkType,
-            drinkSlot,
+            drinkType: drinkType as any, // Will be cast to DrinkType enum
+            drinkFlavour: drinkFlavour as any, // Will be cast to DrinkFlavour enum
             externalTransactionId: null, // Can be set by vending machine
             vendingSessionId: sessionId || `SESSION_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
             status: 'COMPLETED',
@@ -321,7 +321,7 @@ export class ConsumptionService {
           machineId: result.consumption.machineId,
           location: result.consumption.location || '',
           drinkType: result.consumption.drinkType,
-          drinkSlot: result.consumption.drinkSlot,
+          drinkFlavour: result.consumption.drinkFlavour,
           sessionId: result.consumption.vendingSessionId,
           preConsumptionBalance: result.consumption.preConsumptionBalance,
           postConsumptionBalance: result.consumption.postConsumptionBalance,
@@ -338,11 +338,22 @@ export class ConsumptionService {
   }
 
   // Get user's consumption history
-  static async getConsumptionHistory(userId: number, limit: number = 50) {
+  static async getConsumptionHistory(userId: string, limit: number = 50) {
     try {
       const consumptions = await prisma.consumption.findMany({
         where: { userId },
-        include: {
+        select: {
+          id: true,
+          quantity: true,
+          consumedAt: true,
+          machineId: true,
+          location: true,
+          drinkType: true,
+          drinkFlavour: true,
+          vendingSessionId: true,
+          status: true,
+          preConsumptionBalance: true,
+          postConsumptionBalance: true,
           voucher: {
             select: {
               voucherNumber: true,
@@ -361,7 +372,7 @@ export class ConsumptionService {
         machineId: consumption.machineId,
         location: consumption.location || '',
         drinkType: consumption.drinkType || 'Unknown',
-        drinkSlot: consumption.drinkSlot || '',
+        drinkFlavour: consumption.drinkFlavour || '',
         sessionId: consumption.vendingSessionId,
         status: consumption.status,
         preConsumptionBalance: consumption.preConsumptionBalance,
@@ -374,13 +385,13 @@ export class ConsumptionService {
   }
 
   // Get consumption statistics for a user
-  static async getConsumptionStats(userId: number) {
+  static async getConsumptionStats(userId: string) {
     try {
       const stats = await prisma.consumption.groupBy({
         by: ['machineId'],
         where: { userId },
         _count: {
-          id: true,
+          _all: true,
         },
         _sum: {
           quantity: true,
@@ -403,7 +414,7 @@ export class ConsumptionService {
         totalDrinksConsumed: totalDrinks._sum.quantity || 0,
         consumptionsByMachine: stats.map((stat) => ({
           machineId: stat.machineId,
-          consumptions: stat._count.id,
+          consumptions: stat._count._all,
           totalDrinks: stat._sum.quantity || 0,
         })),
       };
@@ -417,12 +428,12 @@ export class ConsumptionService {
   static parseDrinkFromQRCode(qrCode: string): {
     machineQrCode: string;
     drinkType?: string;
-    drinkSlot?: string;
+    drinkFlavour?: string;
     price?: number;
   } {
     try {
       // Check if QR code contains drink selection data
-      // Format: "QR_VM_GYM_ANDHERI_01|SESSION:sessionId|DRINK:Cola|SLOT:A1|PRICE:25"
+      // Format: "QR_VM_GYM_ANDHERI_01|SESSION:sessionId|DRINK:WATER|FLAVOUR:VANILLA|PRICE:25"
       const parts = qrCode.split('|');
       const machineQrCode = parts[0];
       
@@ -437,7 +448,7 @@ export class ConsumptionService {
       for (let i = 1; i < parts.length; i++) {
         const [key, value] = parts[i].split(':');
         if (key === 'DRINK') drinkData.drinkType = value;
-        if (key === 'SLOT') drinkData.drinkSlot = value;
+        if (key === 'FLAVOUR') drinkData.drinkFlavour = value;
         if (key === 'PRICE') drinkData.price = parseInt(value);
       }
 

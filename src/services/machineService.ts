@@ -106,11 +106,11 @@ export class MachineSessionService {
     machineQrCode: string;
     sessionId: string;
     drinkType: string;
-    drinkSlot: string;
+    drinkFlavour: string;
     price: number;
   }): string {
-    const { machineQrCode, sessionId, drinkType, drinkSlot, price } = params;
-    return `${machineQrCode}|SESSION:${sessionId}|DRINK:${drinkType}|SLOT:${drinkSlot}|PRICE:${price}`;
+    const { machineQrCode, sessionId, drinkType, drinkFlavour, price } = params;
+    return `${machineQrCode}|SESSION:${sessionId}|DRINK:${drinkType}|FLAVOUR:${drinkFlavour}|PRICE:${price}`;
   }
 
   /**

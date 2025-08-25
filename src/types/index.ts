@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { User, OtpCode, OtpPurpose, UserRole, Prisma } from '@prisma/client';
+import { User, OtpCode, OtpPurpose, UserRole, Prisma, DrinkFlavour, DrinkType } from '@prisma/client';
 
 // API Response types
 export interface ApiResponse<T = any> {
@@ -96,8 +96,8 @@ export interface DrinkStats {
 // Machine QR types
 export interface GenerateMachineQRRequest {
   machineId: string;
-  drinkType: string;
-  drinkSlot: string;
+  drinkType: DrinkType;
+  drinkFlavour: DrinkFlavour;
   price: number;
 }
 
@@ -106,8 +106,8 @@ export interface GenerateMachineQRResponse {
   sessionId: string;
   machineId: string;
   drinkDetails: {
-    type: string;
-    slot: string;
+    type: DrinkType;
+    flavour: DrinkFlavour;
     price: number;
   };
   expiresAt: Date;
@@ -115,7 +115,7 @@ export interface GenerateMachineQRResponse {
 
 export interface QRScanRequest {
   qrCode: string;
-  voucherId: number;
+  voucherId: string;
 }
 
 export interface PaymentStatusResponse {

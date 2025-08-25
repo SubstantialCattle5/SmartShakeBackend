@@ -1,3 +1,4 @@
+import { DrinkType, DrinkFlavour } from '@prisma/client';
 import { DRINK_CONFIG } from '../config/constants';
 
 export interface ValidationResult {
@@ -11,8 +12,8 @@ export class ValidationService {
    */
   static validateMachineQRRequest(data: {
     machineId?: string;
-    drinkType?: string;
-    drinkSlot?: string;
+    drinkType?: DrinkType;
+    drinkFlavour?: DrinkFlavour;
     price?: number;
   }): ValidationResult {
     const errors: string[] = [];
@@ -23,10 +24,22 @@ export class ValidationService {
 
     if (!data.drinkType || typeof data.drinkType !== 'string' || data.drinkType.trim() === '') {
       errors.push('Drink type is required and must be a non-empty string');
+    } else {
+      // Validate against DrinkType enum
+      const validDrinkTypes = Object.values(DrinkType);
+      if (!validDrinkTypes.includes(data.drinkType as DrinkType)) {
+        errors.push(`Drink type must be one of: ${validDrinkTypes.join(', ')}`);
+      }
     }
 
-    if (!data.drinkSlot || typeof data.drinkSlot !== 'string' || data.drinkSlot.trim() === '') {
-      errors.push('Drink slot is required and must be a non-empty string');
+    if (!data.drinkFlavour || typeof data.drinkFlavour !== 'string' || data.drinkFlavour.trim() === '') {
+      errors.push('Drink flavour is required and must be a non-empty string');
+    } else {
+      // Validate against DrinkFlavour enum
+      const validDrinkFlavours = Object.values(DrinkFlavour);
+      if (!validDrinkFlavours.includes(data.drinkFlavour as DrinkFlavour)) {
+        errors.push(`Drink flavour must be one of: ${validDrinkFlavours.join(', ')}`);
+      }
     }
 
     if (typeof data.price !== 'number' || data.price <= 0) {
@@ -46,7 +59,7 @@ export class ValidationService {
    */
   static validateQRScanRequest(data: {
     qrCode?: string;
-    voucherId?: number;
+    voucherId?: string;
   }): ValidationResult {
     const errors: string[] = [];
 
@@ -54,8 +67,8 @@ export class ValidationService {
       errors.push('QR code is required and must be a non-empty string');
     }
 
-    if (typeof data.voucherId !== 'number' || data.voucherId <= 0) {
-      errors.push('Voucher ID is required and must be a positive number');
+    if (!data.voucherId || typeof data.voucherId !== 'string' || data.voucherId.trim() === '') {
+      errors.push('Voucher ID is required and must be a non-empty string');
     }
 
     return {

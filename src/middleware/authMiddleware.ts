@@ -9,7 +9,7 @@ declare global {
   namespace Express {
     interface Request {
       user?: {
-        id: number;
+        id: string;
         phone: string;
         isVerified: boolean;
         role: UserRole;
@@ -20,7 +20,7 @@ declare global {
 
 export interface AuthenticatedRequest extends Request {
   user: {
-    id: number;
+    id: string;
     phone: string;
     isVerified: boolean;
     role: UserRole;
