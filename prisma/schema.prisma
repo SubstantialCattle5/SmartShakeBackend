@@ -11,7 +11,7 @@ datasource db {
 }
 
 model User {
-  id          Int      @id @default(autoincrement())
+  id          String      @id @default(uuid())
   phone       String   @unique
   email       String?  @unique
   name        String?
@@ -39,13 +39,13 @@ model User {
 }
 
 model OtpCode {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(uuid())
   phone     String
   code      String
   purpose   OtpPurpose @default(LOGIN)
   expiresAt DateTime
   used      Boolean  @default(false)
-  userId    Int?
+  userId    String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 
@@ -55,9 +55,9 @@ model OtpCode {
 }
 
 model BlacklistedToken {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(uuid())
   tokenHash String   @unique  // Hash of the JWT token for security
-  userId    Int
+  userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime // When the original token expires
   reason    String?  // Optional reason for blacklisting (logout, security, etc.)
@@ -74,8 +74,8 @@ model BlacklistedToken {
 // ========================================
 
 model DrinkVoucher {
-  id                Int      @id @default(autoincrement())
-  userId            Int
+  id                String   @id @default(uuid())
+  userId            String
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   // Voucher Details
@@ -104,7 +104,7 @@ model DrinkVoucher {
   // Relations
   consumptions      Consumption[]
   order             Order?   @relation(fields: [orderId], references: [id])
-  orderId           Int?
+  orderId           String?
 
   @@map("drink_vouchers")
   @@index([userId, status])
@@ -118,11 +118,12 @@ model DrinkVoucher {
 // CONSUMPTION TRACKING
 // ========================================
 
+
 model Consumption {
-  id             Int      @id @default(autoincrement())
-  userId         Int
+  id             String   @id @default(uuid())
+  userId         String
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  voucherId      Int
+  voucherId      String
   voucher        DrinkVoucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
   
   // Basic consumption info
@@ -133,8 +134,8 @@ model Consumption {
   machineId      String   // Reference to machine ID from scanned QR code
   machineQRCode  String?  // The actual QR code that was scanned
   location       String?  // Machine location info
-  drinkType      String?  // Optional: type of drink selected (e.g., "Cola", "Water")
-  drinkSlot      String?  // Optional: which slot/product was dispensed
+  drinkType      DrinkType   @default(WATER) //water or milk
+  drinkFlavour    DrinkFlavour  @default(VANILLA)//coffee or vanilla or strawberry
   
   // Integration fields
   externalTransactionId String? @unique // Transaction ID from vending machine backend
@@ -162,7 +163,7 @@ model Consumption {
 // ========================================
 
 model VendingMachine {
-  id          Int      @id @default(autoincrement())
+  id          String   @id @default(uuid())
   machineId   String   @unique  // External machine ID
   name        String   // Machine display name
   location    String   // Location description
@@ -199,8 +200,8 @@ model VendingMachine {
 // ========================================
 
 model Order {
-  id              Int      @id @default(autoincrement())
-  userId          Int
+  id              String   @id @default(uuid())
+  userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   orderNumber     String   @unique  // e.g., "ORD-2024-001"
   
@@ -228,8 +229,8 @@ model Order {
 }
 
 model PaymentMethod {
-  id           Int      @id @default(autoincrement())
-  userId       Int
+  id           String   @id @default(uuid())
+  userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   type         PaymentType
   provider     String   @default("phonepe")  // PhonePe integration
@@ -247,12 +248,12 @@ model PaymentMethod {
 }
 
 model Transaction {
-  id                    Int           @id @default(autoincrement())
-  userId                Int
+  id                    String        @id @default(uuid())
+  userId                String
   user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orderId               Int?
+  orderId               String?
   order                 Order?        @relation(fields: [orderId], references: [id])
-  paymentMethodId       Int?
+  paymentMethodId       String?
   paymentMethod         PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
   
   status                TransactionStatus @default(PENDING)
@@ -352,3 +353,14 @@ enum TransactionType {
   REFUND
   ADJUSTMENT
 } 
+
+enum DrinkType {
+  MILK 
+  WATER
+}
+
+enum DrinkFlavour {
+COFFEE
+VANILLA
+STRAWBERRY
+}

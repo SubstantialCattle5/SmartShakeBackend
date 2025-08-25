@@ -41,6 +41,3 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 export { app }; 
-
-
-//!TODO: add (mill/water) and flavour and remove -> drink slots , remove drink types
