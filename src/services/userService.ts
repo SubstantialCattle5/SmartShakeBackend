@@ -62,7 +62,7 @@ export class UserService {
   }
 
   // Get user by ID
-  static async getUserById(id: number): Promise<UserResponse | null> {
+  static async getUserById(id: string): Promise<UserResponse | null> {
     try {
       const user = await prisma.user.findUnique({
         where: { 
@@ -251,7 +251,7 @@ export class UserService {
   }
 
   // Update user
-  static async updateUser(id: number, userData: Partial<CreateUserRequest>): Promise<UserResponse | null> {
+  static async updateUser(id: string, userData: Partial<CreateUserRequest>): Promise<UserResponse | null> {
     try {
       // Validate phone if being updated
       if (userData.phone) {
@@ -298,7 +298,7 @@ export class UserService {
   }
 
   // Soft delete user
-  static async deleteUser(id: number): Promise<boolean> {
+  static async deleteUser(id: string): Promise<boolean> {
     try {
       const result = await prisma.user.update({
         where: { 
@@ -321,7 +321,7 @@ export class UserService {
   }
 
   // Update current user's profile (for authenticated users)
-  static async updateCurrentUserProfile(userId: number, profileData: UpdateProfileRequest): Promise<{ user?: UserResponse; phoneChangeRequiresVerification?: boolean; message?: string } | null> {
+  static async updateCurrentUserProfile(userId: string, profileData: UpdateProfileRequest): Promise<{ user?: UserResponse; phoneChangeRequiresVerification?: boolean; message?: string } | null> {
     try {
       let phoneChanged = false;
       let newPhone = '';
@@ -429,7 +429,7 @@ export class UserService {
   }
 
   // Get user's voucher and consumption statistics
-  static async getUserDrinkStats(userId: number): Promise<DrinkStats> {
+  static async getUserDrinkStats(userId: string): Promise<DrinkStats> {
     try {
       // Get all user vouchers with related data
       const vouchers = await prisma.drinkVoucher.findMany({
@@ -501,19 +501,16 @@ export class UserService {
         }));
 
       return {
-        totalSubscriptions: totalVouchers, // Legacy field name for compatibility
-        activeSubscriptions: activeVouchers, // Legacy field name for compatibility
         totalDrinksConsumed,
         totalDrinksRemaining,
         recentConsumptions: recentConsumptions.map((consumption) => ({
           productName: consumption.drinkType || 'Unknown Drink',
-          flavor: consumption.drinkSlot || '',
+          flavor: consumption.drinkFlavour || '',
           consumedAt: consumption.consumedAt,
           quantity: consumption.quantity,
           machineLocation: consumption.location || '',
           machineId: consumption.machineId,
         })),
-        activeSubscriptionDetails: activeVoucherDetails, // Legacy field name for compatibility
       };
     } catch (error) {
       console.error('Error fetching user drink stats:', error);

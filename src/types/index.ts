@@ -63,8 +63,6 @@ export interface UpdateProfileRequest {
 
 // Voucher and consumption statistics types
 export interface DrinkStats {
-  totalSubscriptions: number; // Legacy: total vouchers for backward compatibility
-  activeSubscriptions: number; // Legacy: active vouchers for backward compatibility
   totalDrinksConsumed: number;
   totalDrinksRemaining: number;
   recentConsumptions: Array<{
@@ -74,22 +72,6 @@ export interface DrinkStats {
     quantity: number;
     machineLocation?: string; // New field for machine location
     machineId?: string; // New field for machine ID
-  }>;
-  activeSubscriptionDetails: Array<{ // Legacy: voucher details for backward compatibility
-    id: number;
-    packageName: string; // Maps to voucherNumber for backward compatibility
-    totalDrinks: number;
-    consumedDrinks: number;
-    remainingDrinks: number;
-    expiryDate: Date | null;
-    status: string;
-    // New voucher-specific fields
-    voucherNumber?: string;
-    pricePerDrink?: number;
-    totalPrice?: number;
-    isActivated?: boolean;
-    purchaseDate?: Date;
-    firstUsedAt?: Date | null;
   }>;
 }
 

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { UserService } from '../services/userService';
 import { CreateUserRequest, TypedRequest, ApiResponse, UpdateProfileRequest, DrinkStats } from '../types';
+import { isUUID } from '../utils/validationHelper';
 
 export class UserController {
   // GET /api/users
@@ -30,9 +31,9 @@ export class UserController {
   // GET /api/users/:id
   static async getUserById(req: Request, res: Response): Promise<void> {
     try {
-      const userId = parseInt(req.params.id);
+      const userId = req.params.id;
       
-      if (isNaN(userId)) {
+      if (!isUUID(userId)) {
         const response: ApiResponse = {
           success: false,
           error: 'Invalid user ID',
@@ -124,9 +125,9 @@ export class UserController {
   // PUT /api/users/:id
   static async updateUser(req: TypedRequest<Partial<CreateUserRequest>>, res: Response): Promise<void> {
     try {
-      const userId = parseInt(req.params.id);
+      const userId = req.params.id;
       
-      if (isNaN(userId)) {
+      if (!isUUID(userId)) {
         const response: ApiResponse = {
           success: false,
           error: 'Invalid user ID',
@@ -170,9 +171,9 @@ export class UserController {
   // DELETE /api/users/:id - Soft delete user
   static async deleteUser(req: Request, res: Response): Promise<void> {
     try {
-      const userId = parseInt(req.params.id);
+      const userId = req.params.id;
       
-      if (isNaN(userId)) {
+      if (!isUUID(userId)) {
         const response: ApiResponse = {
           success: false,
           error: 'Invalid user ID',
