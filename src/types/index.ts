@@ -76,6 +76,37 @@ export interface DrinkStats {
   }>;
 }
 
+// Enhanced user profile types
+export interface VoucherSummary {
+  totalVouchers: number;
+  activeVouchers: number;
+  totalDrinksRemaining: number;
+  totalSpent: number;
+}
+
+export interface RecentActivity {
+  recentConsumptions: Array<{
+    productName: string;
+    flavor: string;
+    consumedAt: Date;
+    quantity: number;
+    machineLocation: string;
+    machineId: string;
+  }>;
+  recentOrders: Array<{
+    orderNumber: string;
+    totalAmount: number;
+    status: string;
+    paymentStatus: string;
+    createdAt: Date;
+  }>;
+}
+
+export interface EnhancedUserProfile extends UserResponse {
+  voucherSummary: VoucherSummary;
+  recentActivity: RecentActivity;
+}
+
 // Machine QR types
 export interface GenerateMachineQRRequest {
   machineId: string;

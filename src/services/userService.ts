@@ -1,5 +1,5 @@
 import { prisma } from '../config/database';
-import { UserResponse, CreateUserRequest, UpdateProfileRequest, DrinkStats, OtpPurpose } from '../types';
+import { UserResponse, CreateUserRequest, UpdateProfileRequest, DrinkStats, OtpPurpose, VoucherSummary, RecentActivity } from '../types';
 import { Prisma } from '@prisma/client';
 import { OtpService } from './otpService';
 
@@ -515,6 +515,114 @@ export class UserService {
     } catch (error) {
       console.error('Error fetching user drink stats:', error);
       throw new Error('Failed to fetch drink statistics');
+    }
+  }
+
+  // Get user's voucher summary
+  static async getUserVoucherSummary(userId: string): Promise<VoucherSummary> {
+    try {
+      // Get all user vouchers
+      const vouchers = await prisma.drinkVoucher.findMany({
+        where: { userId },
+        select: {
+          id: true,
+          status: true,
+          totalDrinks: true,
+          consumedDrinks: true,
+          totalPrice: true,
+          expiryDate: true,
+        },
+      });
+
+      const totalVouchers = vouchers.length;
+      
+      // Count active vouchers (active status, not expired, has remaining drinks)
+      const activeVouchers = vouchers.filter((voucher) => 
+        voucher.status === 'ACTIVE' && 
+        (voucher.expiryDate === null || voucher.expiryDate > new Date()) &&
+        voucher.consumedDrinks < voucher.totalDrinks
+      ).length;
+
+      // Calculate total drinks remaining from active vouchers
+      const totalDrinksRemaining = vouchers
+        .filter((voucher) => 
+          voucher.status === 'ACTIVE' && 
+          (voucher.expiryDate === null || voucher.expiryDate > new Date()) &&
+          voucher.consumedDrinks < voucher.totalDrinks
+        )
+        .reduce((sum, voucher) => sum + (voucher.totalDrinks - voucher.consumedDrinks), 0);
+
+      // Calculate total amount spent on vouchers
+      const totalSpent = vouchers.reduce((sum, voucher) => sum + Number(voucher.totalPrice), 0);
+
+      return {
+        totalVouchers,
+        activeVouchers,
+        totalDrinksRemaining,
+        totalSpent,
+      };
+    } catch (error) {
+      console.error('Error fetching user voucher summary:', error);
+      throw new Error('Failed to fetch voucher summary');
+    }
+  }
+
+  // Get user's recent activity
+  static async getUserRecentActivity(userId: string): Promise<RecentActivity> {
+    try {
+      // Get recent consumptions (last 10)
+      const recentConsumptions = await prisma.consumption.findMany({
+        where: { userId },
+        orderBy: {
+          consumedAt: 'desc',
+        },
+        take: 10,
+        select: {
+          drinkType: true,
+          drinkFlavour: true,
+          consumedAt: true,
+          quantity: true,
+          location: true,
+          machineId: true,
+        },
+      });
+
+      // Get recent orders (last 10)
+      const recentOrders = await prisma.order.findMany({
+        where: { userId },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: 10,
+        select: {
+          orderNumber: true,
+          totalAmount: true,
+          status: true,
+          paymentStatus: true,
+          createdAt: true,
+        },
+      });
+
+      return {
+        recentConsumptions: recentConsumptions.map((consumption) => ({
+          productName: consumption.drinkType || 'Unknown Drink',
+          flavor: consumption.drinkFlavour || 'No Flavor',
+          consumedAt: consumption.consumedAt,
+          quantity: consumption.quantity,
+          machineLocation: consumption.location || 'Unknown Location',
+          machineId: consumption.machineId,
+        })),
+        recentOrders: recentOrders.map((order) => ({
+          orderNumber: order.orderNumber,
+          totalAmount: Number(order.totalAmount),
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          createdAt: order.createdAt,
+        })),
+      };
+    } catch (error) {
+      console.error('Error fetching user recent activity:', error);
+      throw new Error('Failed to fetch recent activity');
     }
   }
 } 

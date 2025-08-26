@@ -233,10 +233,54 @@ export class UserController {
         res.status(404).json(response);
         return;
       }
+      console.log('User found:', user);
+      // Get additional profile data in parallel
+      console.log('Fetching enhanced profile data for user:', req.user.id);
+      
+      let voucherSummary, recentActivity;
+      try {
+        [voucherSummary, recentActivity] = await Promise.all([
+          UserService.getUserVoucherSummary(req.user.id),
+          UserService.getUserRecentActivity(req.user.id),
+        ]);
+      } catch (profileError) {
+        console.error('Error fetching enhanced profile data:', profileError);
+        // Set default values if there's an error
+        voucherSummary = {
+          totalVouchers: 0,
+          activeVouchers: 0,
+          totalDrinksRemaining: 0,
+          totalSpent: 0
+        };
+        recentActivity = {
+          recentConsumptions: [],
+          recentOrders: []
+        };
+      }
+
+      console.log('Voucher summary:', voucherSummary);
+      console.log('Recent activity:', recentActivity);
+
+      // Combine user data with enhanced profile information
+      const enhancedProfile = {
+        ...user,
+        voucherSummary: voucherSummary || {
+          totalVouchers: 0,
+          activeVouchers: 0,
+          totalDrinksRemaining: 0,
+          totalSpent: 0
+        },
+        recentActivity: recentActivity || {
+          recentConsumptions: [],
+          recentOrders: []
+        },
+      };
+
+      console.log('Enhanced profile constructed successfully');
 
       const response: ApiResponse = {
         success: true,
-        data: { user },
+        data: { user: enhancedProfile },
         message: 'Profile retrieved successfully',
       };
 
