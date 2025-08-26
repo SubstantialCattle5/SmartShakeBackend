@@ -1,9 +1,9 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
-import { prisma } from '../config/database';
-import { Prisma, TransactionStatus } from '@prisma/client';
+import { TransactionStatus, TransactionType } from '@prisma/client';
 import { PhonePeConfig, PaymentInitiationRequest, PaymentInitiationResponse, PaymentStatusResponse, RefundRequest, RefundResponse, CallbackVerificationResult } from '../types/payment.types';
 import { CryptoService } from '../utils/cryptoService';
 import { SecurityService } from '../utils/securityService';
+import { PaymentRepository } from '../repositories/paymentRepository';
 
 export class PaymentService {
   private static config: PhonePeConfig;
@@ -73,120 +73,6 @@ export class PaymentService {
     );
   }
 
-  // ========================================
-  // CRYPTO & SECURITY FUNCTIONS (Now delegated to service classes)
-  // ========================================
-
-  /**
-   * Generate SHA256 hash and encode in Base64
-   */
-  private static generateChecksum(payload: string): string {
-    return this.cryptoService.generatePaymentChecksum(payload);
-  }
-
-  /**
-   * Generate checksum for status check
-   */
-  private static generateStatusChecksum(merchantTransactionId: string): string {
-    return this.cryptoService.generateStatusChecksum(this.config.merchantId, merchantTransactionId);
-  }
-
-  /**
-   * Verify callback signature
-   */
-  private static verifyCallbackChecksum(xVerify: string, response: string): boolean {
-    return this.cryptoService.verifyCallbackChecksum(xVerify, response);
-  }
-
-  // ========================================
-  // UTILITY FUNCTIONS (Now delegated to service classes)
-  // ========================================
-
-  /**
-   * Generate unique merchant transaction ID (max 38 characters for PhonePe)
-   */
-  private static generateMerchantTransactionId(orderId: string): string {
-    return this.securityService.generateMerchantTransactionId(orderId);
-  }
-
-  /**
-   * Convert amount to paise (smallest currency unit)
-   */
-  private static convertToPaise(amount: number): number {
-    return this.securityService.convertToPaise(amount);
-  }
-
-  /**
-   * Convert paise to rupees
-   */
-  private static convertToRupees(paise: number): number {
-    return this.securityService.convertToRupees(paise);
-  }
-
-  /**
-   * Validate amount
-   */
-  private static validateAmount(amount: number): boolean {
-    return this.securityService.validateAmount(amount);
-  }
-
-  // ========================================
-  // DATABASE OPERATIONS
-  // ========================================
-
-  /**
-   * Create transaction record in database
-   */
-  private static async createTransactionRecord(
-    orderId: string,
-    userId: string,
-    amount: number,
-    merchantTransactionId: string
-  ): Promise<string> {
-    try {
-      const transaction = await prisma.transaction.create({
-        data: {
-          userId,
-          orderId,
-          amount: new Prisma.Decimal(amount),
-          currency: 'INR',
-          status: 'PENDING',
-          type: 'PAYMENT',
-          phonepeMerchantId: merchantTransactionId,
-        },
-      });
-      
-      return transaction.id;
-    } catch (error) {
-      console.error('Error creating transaction record:', error);
-      throw new Error('Failed to create transaction record');
-    }
-  }
-
-  /**
-   * Update transaction with PhonePe response
-   */
-  private static async updateTransactionRecord(
-    merchantTransactionId: string,
-    phonepeResponse: any,
-    status: 'SUCCESS' | 'FAILED' | 'PENDING'
-  ): Promise<void> {
-    try {
-      await prisma.transaction.updateMany({
-        where: { phonepeMerchantId: merchantTransactionId },
-        data: {
-          status,
-          phonepeTransactionId: phonepeResponse.data?.transactionId,
-          phonepeResponse: phonepeResponse as any,
-          processedAt: status !== 'PENDING' ? new Date() : null,
-          failureReason: status === 'FAILED' ? phonepeResponse.message : null,
-        },
-      });
-    } catch (error) {
-      console.error('Error updating transaction record:', error);
-      throw new Error('Failed to update transaction record');
-    }
-  }
 
   // ========================================
   // MAIN PAYMENT METHODS
@@ -203,23 +89,26 @@ export class PaymentService {
       }
 
       // Validate amount
-      if (!this.validateAmount(request.amount)) {
+      if (!this.securityService.validateAmount(request.amount)) {
         throw new Error('Invalid amount: must be between ₹0.01 and ₹1000');
       }
 
       // Convert amount to paise
-      const amountInPaise = this.convertToPaise(request.amount);
+      const amountInPaise = this.securityService.convertToPaise(request.amount);
       
       // Generate unique merchant transaction ID
-      const merchantTransactionId = this.generateMerchantTransactionId(request.orderId);
+      const merchantTransactionId = this.securityService.generateMerchantTransactionId(request.orderId);
 
       // Create transaction record
-      await this.createTransactionRecord(
-        request.orderId,
-        request.userId,
-        request.amount,
-        merchantTransactionId
-      );
+      await PaymentRepository.createTransaction({
+        userId: request.userId,
+        orderId: request.orderId,
+        amount: request.amount,
+        currency: 'INR',
+        status: TransactionStatus.PENDING,
+        type: TransactionType.PAYMENT,
+        phonepeMerchantId: merchantTransactionId,
+      });
 
       // Prepare payment request payload
       const paymentPayload = {
@@ -240,7 +129,7 @@ export class PaymentService {
       const base64Payload = this.cryptoService.encodePayload(paymentPayload);
       
       // Generate checksum
-      const checksum = this.generateChecksum(base64Payload);
+      const checksum = this.cryptoService.generatePaymentChecksum(base64Payload);
 
       // Prepare API request
       const apiRequest = {
@@ -261,7 +150,13 @@ export class PaymentService {
       console.log('PhonePe Payment Initiation Response:', response.data);
 
       // Update transaction record with initial response
-      await this.updateTransactionRecord(merchantTransactionId, response.data, 'PENDING');
+      await PaymentRepository.updateTransactionByMerchantId(merchantTransactionId, {
+        status: TransactionStatus.PENDING,
+        phonepeTransactionId: response.data.data?.merchantTransactionId || undefined,
+        phonepeResponse: response.data as any,
+        processedAt: null,
+        failureReason: null,
+      });
 
       // Extract payment URL from PhonePe response
       const paymentUrl = response.data.data?.instrumentResponse?.redirectInfo?.url;
@@ -306,7 +201,7 @@ export class PaymentService {
       }
 
       // Generate checksum for status check
-      const checksum = this.generateStatusChecksum(merchantTransactionId);
+      const checksum = this.cryptoService.generateStatusChecksum(this.config.merchantId, merchantTransactionId);
 
       const headers = {
         'X-VERIFY': checksum,
@@ -337,7 +232,13 @@ export class PaymentService {
             status = TransactionStatus.PENDING;
         }
 
-        await this.updateTransactionRecord(merchantTransactionId, response.data, status);
+        await PaymentRepository.updateTransactionByMerchantId(merchantTransactionId, {
+          status,
+          phonepeTransactionId: response.data.data?.transactionId,
+          phonepeResponse: response.data as any,
+          processedAt: status !== TransactionStatus.PENDING ? new Date() : null,
+          failureReason: status === TransactionStatus.FAILED ? response.data.message : null,
+        });
       }
 
       return response.data;
@@ -363,7 +264,7 @@ export class PaymentService {
   static async verifyCallback(xVerify: string, responseBody: string): Promise<CallbackVerificationResult> {
     try {
       // Verify checksum
-      const isValidChecksum = this.verifyCallbackChecksum(xVerify, responseBody);
+      const isValidChecksum = this.cryptoService.verifyCallbackChecksum(xVerify, responseBody);
       
       if (!isValidChecksum) {
         return {
@@ -391,10 +292,15 @@ export class PaymentService {
             status = TransactionStatus.PENDING;
         }
 
-        await this.updateTransactionRecord(
+        await PaymentRepository.updateTransactionByMerchantId(
           transactionData.merchantTransactionId,
-          { data: transactionData } as any,
-          status
+          {
+            status,
+            phonepeTransactionId: transactionData.transactionId || transactionData.phonepeTransactionId,
+            phonepeResponse: { data: transactionData } as any,
+            processedAt: status !== TransactionStatus.PENDING ? new Date() : null,
+            failureReason: status === TransactionStatus.FAILED ? transactionData.message : null,
+          }
         );
       }
 
@@ -426,7 +332,7 @@ export class PaymentService {
       }
 
       // Validate amount
-      if (!this.validateAmount(this.convertToRupees(request.amount))) {
+      if (!this.securityService.validateAmount(this.securityService.convertToRupees(request.amount))) {
         throw new Error('Invalid refund amount');
       }
 
@@ -466,25 +372,18 @@ export class PaymentService {
       // Create refund transaction record
       if (response.data.success) {
         // Find original transaction
-        const originalTransaction = await prisma.transaction.findFirst({
-          where: { phonepeTransactionId: request.originalTransactionId },
-        });
+        const originalTransaction = await PaymentRepository.getTransactionByPhonePeId(
+          request.originalTransactionId,
+          false
+        );
 
         if (originalTransaction) {
           // Create refund transaction record
-          await prisma.transaction.create({
-            data: {
-              userId: originalTransaction.userId,
-              orderId: originalTransaction.orderId,
-              amount: new Prisma.Decimal(this.convertToRupees(request.amount)),
-              currency: 'INR',
-              status: 'SUCCESS',
-              type: 'REFUND',
-              phonepeMerchantId: request.merchantTransactionId,
-              phonepeTransactionId: response.data.data?.transactionId,
-              phonepeResponse: response.data as any,
-              processedAt: new Date(),
-            },
+          await PaymentRepository.createRefundTransaction(originalTransaction, {
+            amount: this.securityService.convertToRupees(request.amount),
+            merchantTransactionId: request.merchantTransactionId,
+            phonepeTransactionId: response.data.data?.transactionId,
+            phonepeResponse: response.data as any,
           });
         }
       }
@@ -514,18 +413,42 @@ export class PaymentService {
    * Get transaction by merchant transaction ID
    */
   static async getTransactionByMerchantId(merchantTransactionId: string) {
-    try {
-      return await prisma.transaction.findFirst({
-        where: { phonepeMerchantId: merchantTransactionId },
-        include: {
-          user: true,
-          order: true,
-        },
-      });
-    } catch (error) {
-      console.error('Error fetching transaction:', error);
-      return null;
-    }
+    return await PaymentRepository.getTransactionByMerchantId(merchantTransactionId, true);
+  }
+
+  /**
+   * Get transaction by PhonePe transaction ID
+   */
+  static async getTransactionByPhonePeId(phonepeTransactionId: string) {
+    return await PaymentRepository.getTransactionByPhonePeId(phonepeTransactionId, true);
+  }
+
+  /**
+   * Get transactions by user ID
+   */
+  static async getUserTransactions(userId: string, limit?: number, offset?: number) {
+    return await PaymentRepository.getTransactionsByUserId(userId, limit, offset, true);
+  }
+
+  /**
+   * Get transactions by order ID
+   */
+  static async getOrderTransactions(orderId: string) {
+    return await PaymentRepository.getTransactionsByOrderId(orderId, true);
+  }
+
+  /**
+   * Get user transaction statistics
+   */
+  static async getUserTransactionStats(userId: string) {
+    return await PaymentRepository.getUserTransactionStats(userId);
+  }
+
+  /**
+   * Get transactions by status
+   */
+  static async getTransactionsByStatus(status: TransactionStatus, limit?: number, offset?: number) {
+    return await PaymentRepository.getTransactionsByStatus(status, limit, offset, true);
   }
 
   /**
