@@ -26,11 +26,11 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Check if running as root
-if [ "$EUID" -eq 0 ]; then
-    print_error "Please don't run this script as root. Run as your regular user."
-    exit 1
-fi
+# # Check if running as root
+# if [ "$EUID" -eq 0 ]; then
+#     print_error "Please don't run this script as root. Run as your regular user."
+#     exit 1
+# fi
 
 # Update system packages
 print_status "Updating system packages..."
