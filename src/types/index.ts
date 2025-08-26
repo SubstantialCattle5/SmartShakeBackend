@@ -7,6 +7,7 @@ export interface ApiResponse<T = any> {
   data?: T;
   message?: string;
   error?: string;
+  code?: string;
 }
 
 // Use Prisma types instead of custom types
@@ -103,12 +104,56 @@ export interface QRScanRequest {
 export interface PaymentStatusResponse {
   paymentCompleted: boolean;
   sessionId: string;
-  consumptionId?: number;
+  consumptionId?: string;
   voucherNumber?: string;
   drinkType?: string;
   drinkSlot?: string;
   consumedAt?: Date;
   canDispense: boolean;
+}
+
+// Payment related types
+export interface VoucherPurchaseRequest {
+  totalDrinks: number;
+  totalPrice: number;
+  expiryDays?: number;
+}
+
+export interface OrderResponse {
+  order: {
+    id: string;
+    orderNumber: string;
+    totalAmount: number;
+    totalDrinks: number;
+    status: string;
+    paymentStatus: string;
+    createdAt: Date;
+  };
+  transaction: {
+    id: string;
+    status: string;
+    amount: number;
+  };
+}
+
+export interface VoucherResponse {
+  voucher: {
+    id: string;
+    voucherNumber: string;
+    totalDrinks: number;
+    consumedDrinks: number;
+    pricePerDrink: number;
+    totalPrice: number;
+    status: string;
+    purchaseDate: Date;
+    expiryDate: Date | null;
+  };
+  order: {
+    id: string;
+    orderNumber: string;
+    status: string;
+    paymentStatus: string;
+  };
 }
 
 // Re-export Prisma types for convenience

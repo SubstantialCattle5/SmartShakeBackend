@@ -5,9 +5,20 @@ import dotenv from 'dotenv';
 
 import { routes } from './routes';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import { PaymentService } from './services/paymentService';
 
 // Load environment variables
 dotenv.config();
+
+// Initialize PaymentService
+try {
+  PaymentService.initialize();
+  console.log('✅ PaymentService initialized successfully');
+} catch (error) {
+  console.error('❌ PaymentService initialization failed:', error);
+  // Don't exit process, just log the error
+  // The app can still function without payment service
+}
 
 // Create Express application
 const app = express();

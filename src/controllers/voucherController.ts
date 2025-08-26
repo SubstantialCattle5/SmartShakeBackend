@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { VoucherService, VoucherPurchaseRequest } from '../services/voucherService';
 import { ApiResponse, TypedRequest, TypedResponse } from '../types';
+import { isUUID } from '../utils/validationHelper';
 
 export class VoucherController {
   
@@ -62,7 +63,7 @@ export class VoucherController {
 
   // Complete payment and create voucher
   static async completePayment(req: TypedRequest<{
-    orderId: number;
+    orderId: string;
     phonepeTransactionId: string;
     phonepeResponse?: any;
   }>, res: TypedResponse) {
@@ -116,7 +117,7 @@ export class VoucherController {
 
   // Cancel voucher order
   static async cancelOrder(req: TypedRequest<{
-    orderId: number;
+    orderId: string;
     reason?: string;
   }>, res: TypedResponse) {
     try {
@@ -135,6 +136,13 @@ export class VoucherController {
         return res.status(400).json({
           success: false,
           error: 'Order ID is required',
+        });
+      }
+
+      if (!isUUID(orderId)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid order ID format',
         });
       }
 
@@ -209,9 +217,9 @@ export class VoucherController {
         });
       }
 
-      const voucherId = parseInt(req.params.id);
+      const voucherId = req.params.id;
 
-      if (isNaN(voucherId)) {
+      if (!isUUID(voucherId)) {
         return res.status(400).json({
           success: false,
           error: 'Invalid voucher ID',
@@ -253,9 +261,9 @@ export class VoucherController {
         });
       }
 
-      const orderId = parseInt(req.params.id);
+      const orderId = req.params.id;
 
-      if (isNaN(orderId)) {
+      if (!isUUID(orderId)) {
         return res.status(400).json({
           success: false,
           error: 'Invalid order ID',

@@ -8,7 +8,7 @@ export interface VoucherPurchaseRequest {
 }
 
 export interface VoucherResponse {
-  id: number;
+  id: string;
   voucherNumber: string;
   totalDrinks: number;
   consumedDrinks: number;
@@ -20,7 +20,7 @@ export interface VoucherResponse {
   purchaseDate: Date;
   expiryDate: Date | null;
   order: {
-    id: number;
+    id: string;
     orderNumber: string;
     status: OrderStatus;
     paymentStatus: PaymentStatus;
@@ -28,7 +28,7 @@ export interface VoucherResponse {
 }
 
 export interface OrderResponse {
-  id: number;
+  id: string;
   orderNumber: string;
   orderType: OrderType;
   totalDrinks: number;
@@ -71,7 +71,7 @@ export class VoucherService {
 
   // Create voucher purchase order
   static async createVoucherOrder(
-    userId: number, 
+    userId: string, 
     voucherData: VoucherPurchaseRequest
   ): Promise<OrderResponse> {
     try {
@@ -123,7 +123,7 @@ export class VoucherService {
 
   // Complete voucher purchase after successful payment
   static async completeVoucherPurchase(
-    orderId: number,
+    orderId: string,
     phonepeTransactionId: string,
     phonepeResponse?: any
   ): Promise<VoucherResponse> {
@@ -217,7 +217,7 @@ export class VoucherService {
   }
 
   // Cancel voucher order
-  static async cancelVoucherOrder(orderId: number, reason?: string): Promise<boolean> {
+  static async cancelVoucherOrder(orderId: string, reason?: string): Promise<boolean> {
     try {
       await prisma.$transaction(async (tx) => {
         // Update order status
@@ -248,7 +248,7 @@ export class VoucherService {
   }
 
   // Get user's vouchers
-  static async getUserVouchers(userId: number): Promise<VoucherResponse[]> {
+  static async getUserVouchers(userId: string): Promise<VoucherResponse[]> {
     try {
       const vouchers = await prisma.drinkVoucher.findMany({
         where: { userId },
@@ -278,7 +278,7 @@ export class VoucherService {
         purchaseDate: voucher.purchaseDate,
         expiryDate: voucher.expiryDate,
         order: {
-          id: voucher.order?.id || 0,
+          id: voucher.order?.id || '',
           orderNumber: voucher.order?.orderNumber || '',
           status: voucher.order?.status || 'PENDING',
           paymentStatus: voucher.order?.paymentStatus || 'PENDING',
@@ -291,7 +291,7 @@ export class VoucherService {
   }
 
   // Get voucher by ID
-  static async getVoucherById(voucherId: number, userId?: number): Promise<VoucherResponse | null> {
+  static async getVoucherById(voucherId: string, userId?: string): Promise<VoucherResponse | null> {
     try {
       // First find voucher with user filter if provided
       const voucher = await prisma.drinkVoucher.findFirst({
@@ -328,7 +328,7 @@ export class VoucherService {
         purchaseDate: voucher.purchaseDate,
         expiryDate: voucher.expiryDate,
         order: {
-          id: voucher.order?.id || 0,
+          id: voucher.order?.id || '',
           orderNumber: voucher.order?.orderNumber || '',
           status: voucher.order?.status || 'PENDING',
           paymentStatus: voucher.order?.paymentStatus || 'PENDING',
@@ -341,7 +341,7 @@ export class VoucherService {
   }
 
   // Get order by ID
-  static async getOrderById(orderId: number, userId?: number): Promise<OrderResponse | null> {
+  static async getOrderById(orderId: string, userId?: string): Promise<OrderResponse | null> {
     try {
       const order = await prisma.order.findFirst({
         where: {

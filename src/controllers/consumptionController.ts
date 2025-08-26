@@ -6,6 +6,7 @@ import { TypedRequest, TypedResponse, GenerateMachineQRRequest, GenerateMachineQ
 import { SESSION_CONFIG, VALIDATION_LIMITS } from '../config/constants';
 import { prisma } from '../config/database';
 import { DrinkFlavour, DrinkType } from '@prisma/client';
+import { isUUID } from '../utils/validationHelper';
 
 export class ConsumptionController {
 
@@ -264,6 +265,14 @@ export class ConsumptionController {
 
       const { qrCode, voucherId } = req.body;
       const voucherIdString = typeof voucherId === 'number' ? (voucherId as number).toString() : voucherId as string;
+
+      // Validate voucherId format
+      if (!isUUID(voucherIdString)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid voucher ID format',
+        });
+      }
 
       // Parse and validate QR code
       const qrValidation = ConsumptionController.validateAndParseQRCode(qrCode);
