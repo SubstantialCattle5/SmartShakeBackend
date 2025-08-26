@@ -1,17 +1,15 @@
-import crypto from 'crypto';
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import { prisma } from '../config/database';
 import { Prisma, TransactionStatus } from '@prisma/client';
-import { PhonePeConfig, PaymentInitiationRequest, PaymentInitiationResponse, PaymentStatusResponse  , RefundRequest, RefundResponse, CallbackVerificationResult } from '../types/payment.types';
-
-
-// ========================================
-// PHONEPE PAYMENT SERVICE
-// ========================================
+import { PhonePeConfig, PaymentInitiationRequest, PaymentInitiationResponse, PaymentStatusResponse, RefundRequest, RefundResponse, CallbackVerificationResult } from '../types/payment.types';
+import { CryptoService } from '../utils/cryptoService';
+import { SecurityService } from '../utils/securityService';
 
 export class PaymentService {
   private static config: PhonePeConfig;
   private static httpClient: AxiosInstance;
+  private static cryptoService: CryptoService;
+  private static securityService: SecurityService;
 
   // Initialize PhonePe configuration
   static initialize(): void {
@@ -24,9 +22,20 @@ export class PaymentService {
       callbackUrl: process.env.PHONEPE_CALLBACK_URL || '',
     };
 
-    // Validate required configuration
-    if (!this.config.merchantId || !this.config.saltKey) {
-      throw new Error('PhonePe configuration missing: PHONEPE_MERCHANT_ID and PHONEPE_SALT_KEY are required');
+    // Initialize service instances
+    this.cryptoService = new CryptoService(this.config.saltKey, this.config.saltIndex);
+    this.securityService = new SecurityService(100000, 0.01); // Max ₹1000, Min ₹0.01
+
+    // Validate configuration using SecurityService
+    const validation = this.securityService.validateConfiguration({
+      merchantId: this.config.merchantId,
+      saltKey: this.config.saltKey,
+      saltIndex: this.config.saltIndex,
+      baseUrl: this.config.baseUrl,
+    });
+
+    if (!validation.isValid) {
+      throw new Error(`PhonePe configuration validation failed: ${validation.errors.join(', ')}`);
     }
 
     // Initialize HTTP client
@@ -65,96 +74,60 @@ export class PaymentService {
   }
 
   // ========================================
-  // CRYPTO & SECURITY FUNCTIONS
+  // CRYPTO & SECURITY FUNCTIONS (Now delegated to service classes)
   // ========================================
 
   /**
    * Generate SHA256 hash and encode in Base64
    */
   private static generateChecksum(payload: string): string {
-    const saltKey = this.config.saltKey;
-    const saltIndex = this.config.saltIndex;
-    
-    const stringToHash = payload + '/pg/v1/pay' + saltKey;
-    const hash = crypto.createHash('sha256').update(stringToHash).digest('hex');
-    return hash + '###' + saltIndex;
+    return this.cryptoService.generatePaymentChecksum(payload);
   }
 
   /**
    * Generate checksum for status check
    */
   private static generateStatusChecksum(merchantTransactionId: string): string {
-    const saltKey = this.config.saltKey;
-    const saltIndex = this.config.saltIndex;
-    
-    const stringToHash = `/pg/v1/status/${this.config.merchantId}/${merchantTransactionId}` + saltKey;
-    const hash = crypto.createHash('sha256').update(stringToHash).digest('hex');
-    return hash + '###' + saltIndex;
+    return this.cryptoService.generateStatusChecksum(this.config.merchantId, merchantTransactionId);
   }
 
   /**
    * Verify callback signature
    */
   private static verifyCallbackChecksum(xVerify: string, response: string): boolean {
-    try {
-      const saltKey = this.config.saltKey;
-      const saltIndex = this.config.saltIndex;
-      
-      const [hash, index] = xVerify.split('###');
-      
-      if (parseInt(index) !== saltIndex) {
-        return false;
-      }
-      
-      const stringToHash = response + saltKey;
-      const computedHash = crypto.createHash('sha256').update(stringToHash).digest('hex');
-      
-      return hash === computedHash;
-    } catch (error) {
-      console.error('Checksum verification error:', error);
-      return false;
-    }
+    return this.cryptoService.verifyCallbackChecksum(xVerify, response);
   }
 
   // ========================================
-  // UTILITY FUNCTIONS
+  // UTILITY FUNCTIONS (Now delegated to service classes)
   // ========================================
 
   /**
    * Generate unique merchant transaction ID (max 38 characters for PhonePe)
    */
   private static generateMerchantTransactionId(orderId: string): string {
-    // Use timestamp and random for uniqueness, keep it under 38 chars
-    const timestamp = Date.now().toString().slice(-8); // Last 8 digits of timestamp
-    const randomStr = Math.random().toString(36).substring(2, 6); // 4 random chars
-    const orderShort = orderId.substring(0, 8); // First 8 chars of order ID
-    
-    // Format: TXN_orderShort_timestamp_random (max 38 chars)
-    const txnId = `TXN_${orderShort}_${timestamp}_${randomStr}`;
-    
-    // Ensure it's under 38 characters
-    return txnId.length > 38 ? txnId.substring(0, 38) : txnId;
+    return this.securityService.generateMerchantTransactionId(orderId);
   }
 
   /**
    * Convert amount to paise (smallest currency unit)
    */
   private static convertToPaise(amount: number): number {
-    return Math.round(amount * 100);
+    return this.securityService.convertToPaise(amount);
   }
 
   /**
    * Convert paise to rupees
    */
   private static convertToRupees(paise: number): number {
-    return paise / 100;
+    return this.securityService.convertToRupees(paise);
   }
 
   /**
    * Validate amount
    */
   private static validateAmount(amount: number): boolean {
-    return amount > 0 && amount <= 100000; // Max ₹1000
+    return this.securityService.validateAmount(amount);
   }
 
   // ========================================
@@ -264,7 +237,7 @@ export class PaymentService {
       };
 
       // Convert payload to base64
-      const base64Payload = Buffer.from(JSON.stringify(paymentPayload)).toString('base64');
+      const base64Payload = this.cryptoService.encodePayload(paymentPayload);
       
       // Generate checksum
       const checksum = this.generateChecksum(base64Payload);
@@ -400,8 +373,7 @@ export class PaymentService {
       }
 
       // Decode the response
-      const decodedResponse = Buffer.from(responseBody, 'base64').toString('utf-8');
-      const transactionData = JSON.parse(decodedResponse);
+      const transactionData = this.cryptoService.decodePayload(responseBody);
 
       // Update transaction record
       if (transactionData.merchantTransactionId) {
@@ -468,10 +440,10 @@ export class PaymentService {
       };
 
       // Convert payload to base64
-      const base64Payload = Buffer.from(JSON.stringify(refundPayload)).toString('base64');
+      const base64Payload = this.cryptoService.encodePayload(refundPayload);
       
-      // Generate checksum
-      const checksum = this.generateChecksum(base64Payload);
+      // Generate checksum for refund
+      const checksum = this.cryptoService.generateRefundChecksum(base64Payload);
 
       // Prepare API request
       const apiRequest = {

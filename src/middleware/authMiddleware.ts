@@ -59,7 +59,7 @@ export class AuthMiddleware {
 
       // Check if all tokens for this user are blacklisted (logout from all devices)
       const tokenIssuedAt = decoded.iat || 0;
-      const allTokensBlacklisted = await JwtService.areAllUserTokensBlacklisted(decoded.userId, tokenIssuedAt);
+      const allTokensBlacklisted = await JwtService.areAllUserTokensBlacklisted(decoded.userId.toString(), tokenIssuedAt);
       if (allTokensBlacklisted) {
         const response: ApiResponse = {
           success: false,
@@ -70,7 +70,7 @@ export class AuthMiddleware {
       }
 
       // Get user from database to ensure they still exist and are active
-      const user = await UserService.getUserById(decoded.userId);
+      const user = await UserService.getUserById(decoded.userId.toString());
       if (!user) {
         const response: ApiResponse = {
           success: false,
@@ -150,10 +150,10 @@ export class AuthMiddleware {
           if (!isBlacklisted) {
             // Check if all tokens for this user are blacklisted
             const tokenIssuedAt = decoded.iat || 0;
-            const allTokensBlacklisted = await JwtService.areAllUserTokensBlacklisted(decoded.userId, tokenIssuedAt);
+            const allTokensBlacklisted = await JwtService.areAllUserTokensBlacklisted(decoded.userId.toString(), tokenIssuedAt);
             
             if (!allTokensBlacklisted) {
-              const user = await UserService.getUserById(decoded.userId);
+              const user = await UserService.getUserById(decoded.userId.toString());
               
               if (user) {
                 req.user = {

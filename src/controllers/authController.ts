@@ -418,7 +418,7 @@ export class AuthController {
         const decoded = JwtService.verifyToken(refreshToken!);
         
         // Get user from database
-        const user = await UserService.getUserById(decoded.userId);
+        const user = await UserService.getUserById(decoded.userId.toString());
         if (!user) {
           const response: ApiResponse = {
             success: false,

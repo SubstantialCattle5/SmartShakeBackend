@@ -137,7 +137,7 @@ export class JwtService {
   }
 
   // Blacklist a token (for logout)
-  static async blacklistToken(token: string, userId: number, reason: string = 'logout'): Promise<void> {
+  static async blacklistToken(token: string, userId: string, reason: string = 'logout'): Promise<void> {
     try {
       const decoded = this.decodeToken(token);
       if (!decoded || !decoded.exp) {
@@ -181,7 +181,7 @@ export class JwtService {
   }
 
   // Blacklist all tokens for a user (logout from all devices)
-  static async blacklistAllUserTokens(userId: number, reason: string = 'logout_all_devices'): Promise<void> {
+  static async blacklistAllUserTokens(userId: string, reason: string = 'logout_all_devices'): Promise<void> {
     try {
       // Get all active tokens for the user from database
       // Since we don't store tokens directly, we'll create a future expiry date
@@ -205,7 +205,7 @@ export class JwtService {
   }
 
   // Check if all tokens for a user are blacklisted (logout from all devices)
-  static async areAllUserTokensBlacklisted(userId: number, tokenIssuedAt: number): Promise<boolean> {
+  static async areAllUserTokensBlacklisted(userId: string, tokenIssuedAt: number): Promise<boolean> {
     try {
       const blacklistEntry = await prisma.blacklistedToken.findFirst({
         where: {
