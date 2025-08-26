@@ -1,9 +1,9 @@
 import { prisma } from '../config/database';
 import { VoucherStatus, OrderStatus, PaymentStatus, TransactionStatus, OrderType, Prisma } from '@prisma/client';
+import { getVoucherPackage, VoucherPackage } from '../config/voucherPackages';
 
 export interface VoucherPurchaseRequest {
-  totalDrinks: number;
-  totalPrice: number;
+  packageId: string;
   expiryDays?: number; // Optional: defaults to 90 days
 }
 
@@ -75,7 +75,13 @@ export class VoucherService {
     voucherData: VoucherPurchaseRequest
   ): Promise<OrderResponse> {
     try {
-      const totalAmount = voucherData.totalPrice;
+      // Get package details from packageId
+      const packageInfo = getVoucherPackage(voucherData.packageId);
+      if (!packageInfo) {
+        throw new Error('Invalid package ID');
+      }
+
+      const totalAmount = packageInfo.totalPrice;
       const orderNumber = this.generateOrderNumber();
       const merchantTransactionId = this.generateMerchantTransactionId();
 
@@ -84,7 +90,7 @@ export class VoucherService {
           userId,
           orderNumber,
           orderType: OrderType.VOUCHER_PURCHASE,
-          totalDrinks: voucherData.totalDrinks,
+          totalDrinks: packageInfo.totalDrinks,
           totalAmount,
           status: OrderStatus.PENDING,
           paymentStatus: PaymentStatus.PENDING,

@@ -83,7 +83,7 @@ npx prisma migrate deploy
 # Set up PM2 ecosystem
 print_status "Setting up PM2 process manager..."
 pm2 delete smartshake-backend 2>/dev/null || true  # Delete if exists
-pm2 start ecosystem.config.js --env production
+pm2 start ecosystem.config.js --env development
 
 # Save PM2 configuration
 pm2 save

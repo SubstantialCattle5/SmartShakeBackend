@@ -114,8 +114,7 @@ export interface PaymentStatusResponse {
 
 // Payment related types
 export interface VoucherPurchaseRequest {
-  totalDrinks: number;
-  totalPrice: number;
+  packageId: string;
   expiryDays?: number;
 }
 

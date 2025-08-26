@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { VoucherService, VoucherPurchaseRequest } from '../services/voucherService';
 import { ApiResponse, TypedRequest, TypedResponse } from '../types';
 import { isUUID } from '../utils/validationHelper';
+import { getAllVoucherPackages, isValidPackageId } from '../config/voucherPackages';
 
 export class VoucherController {
   
@@ -17,33 +18,25 @@ export class VoucherController {
         });
       }
 
-      const { totalDrinks, totalPrice, expiryDays } = req.body;
+      const { packageId, expiryDays } = req.body;
 
       // Validate input
-      if (!totalDrinks || !totalPrice) {
+      if (!packageId) {
         return res.status(400).json({
           success: false,
-          error: 'Total drinks and price per drink are required',
+          error: 'Package ID is required',
         });
       }
 
-      if (totalDrinks < 1 || totalDrinks > 100) {
+      if (!isValidPackageId(packageId)) {
         return res.status(400).json({
           success: false,
-          error: 'Total drinks must be between 1 and 100',
-        });
-      }
-
-      if (totalPrice <= 0) {
-        return res.status(400).json({
-          success: false,
-          error: 'Total price must be greater than 0',
+          error: 'Invalid package ID',
         });
       }
 
       const order = await VoucherService.createVoucherOrder(userId, {
-        totalDrinks,
-        totalPrice,
+        packageId,
         expiryDays,
       });
 
@@ -293,51 +286,10 @@ export class VoucherController {
     }
   }
 
-  // Get voucher packages/pricing options (static data for now)
+  // Get voucher packages/pricing options
   static async getVoucherPackages(req: Request, res: TypedResponse) {
     try {
-      const packages = [
-        {
-          id: 'small',
-          name: 'Small Pack',
-          totalDrinks: 10,
-          pricePerDrink: 25,
-          totalPrice: 250,
-          originalPrice: 300,
-          savings: 50,
-          recommended: false,
-        },
-        {
-          id: 'medium',
-          name: 'Medium Pack',
-          totalDrinks: 20,
-          pricePerDrink: 23,
-          totalPrice: 460,
-          originalPrice: 600,
-          savings: 140,
-          recommended: true,
-        },
-        {
-          id: 'large',
-          name: 'Large Pack',
-          totalDrinks: 50,
-          pricePerDrink: 20,
-          totalPrice: 1000,
-          originalPrice: 1500,
-          savings: 500,
-          recommended: false,
-        },
-        {
-          id: 'jumbo',
-          name: 'Jumbo Pack',
-          totalDrinks: 100,
-          pricePerDrink: 18,
-          totalPrice: 1800,
-          originalPrice: 3000,
-          savings: 1200,
-          recommended: false,
-        },
-      ];
+      const packages = getAllVoucherPackages();
 
       res.status(200).json({
         success: true,
